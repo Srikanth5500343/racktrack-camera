@@ -1,299 +1,635 @@
 <!DOCTYPE html>
 <html>
 <head>
+ 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RackTrack Guided Capture</title>
-
+ 
+<title>RackTrack Capture</title>
+ 
 <style>
-
+ 
 body{
+
 margin:0;
+
 background:black;
+
 color:white;
+
 font-family:system-ui;
+
 overflow:hidden;
-}
 
+}
+ 
 video{
+
 position:fixed;
+
 width:100%;
+
 height:100%;
+
 object-fit:cover;
-}
 
+}
+ 
 canvas{
+
 position:fixed;
+
 width:100%;
+
 height:100%;
-}
 
+pointer-events:none;
+
+}
+ 
 .header{
+
 position:fixed;
+
 top:0;
+
 width:100%;
+
 text-align:center;
-padding:12px;
+
+padding:14px;
+
 font-size:20px;
+
+font-weight:600;
+
 background:linear-gradient(black,transparent);
-}
 
+}
+ 
 .instructions{
+
 position:fixed;
+
 bottom:140px;
+
 width:100%;
+
 text-align:center;
+
 font-size:18px;
-}
 
+padding:10px;
+
+}
+ 
 .controls{
+
 position:fixed;
-bottom:20px;
+
+bottom:30px;
+
 width:100%;
+
 display:flex;
+
 justify-content:center;
+
 gap:40px;
-}
 
+}
+ 
 button{
+
 border:none;
+
 border-radius:50%;
+
 width:60px;
+
 height:60px;
+
 font-size:22px;
+
 background:rgba(255,255,255,0.2);
+
 color:white;
-}
 
+}
+ 
 .record{
+
 background:red;
+
 width:80px;
+
 height:80px;
+
 }
-
+ 
 </style>
-
+ 
 </head>
-
+ 
 <body>
-
+ 
 <div class="header">RackTrack</div>
-
+ 
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas"></canvas>
-
+ 
 <div id="instructions" class="instructions">
-Align full rack vertically
-</div>
 
+Press record to start
+</div>
+ 
 <div class="controls">
-
+ 
 <button id="flip">🔄</button>
-<button id="record" class="record"></button>
+<button id="record" class="record">●</button>
 <button id="pause">⏸</button>
-
+ 
 </div>
-
+ 
 <script>
-
+ 
 let video=document.getElementById("video")
+
 let canvas=document.getElementById("canvas")
+
 let ctx=canvas.getContext("2d")
-
-let recordBtn=document.getElementById("record")
-let pauseBtn=document.getElementById("pause")
-let flipBtn=document.getElementById("flip")
+ 
 let instructions=document.getElementById("instructions")
+ 
+let recordBtn=document.getElementById("record")
 
+let pauseBtn=document.getElementById("pause")
+
+let flipBtn=document.getElementById("flip")
+ 
 canvas.width=window.innerWidth
+
 canvas.height=window.innerHeight
-
+ 
 let usingFront=false
+
 let stream
+
 let recorder
+
 let chunks=[]
-
+ 
 let recording=false
+
 let paused=false
+ 
+let phase="idle"
+ 
+let rackStart=null
 
-let phase="rack"   // rack → rotate → scan
-let rackStartTime=0
-let scanStartTime=0
+let rotateStart=null
 
-let prevX=null
+let scanStart=null
+ 
+let prevFrame=null
 
+let lastPanTime=0
+ 
+let shakeLevel=0
+ 
 async function startCamera(){
+ 
+if(stream){
 
+stream.getTracks().forEach(t=>t.stop())
+
+}
+ 
 stream=await navigator.mediaDevices.getUserMedia({
+
 video:{facingMode: usingFront?"user":"environment"},
+
 audio:false
+
 })
-
+ 
 video.srcObject=stream
-
+ 
 recorder=new MediaRecorder(stream)
-
+ 
 recorder.ondataavailable=e=>{
+
 chunks.push(e.data)
-}
 
+}
+ 
 recorder.onstop=()=>{
-let blob=new Blob(chunks,{type:'video/webm'})
+ 
+let blob=new Blob(chunks,{type:"video/webm"})
+
 let url=URL.createObjectURL(blob)
+ 
 let a=document.createElement("a")
+
 a.href=url
-a.download="racktrack.webm"
+
+a.download="racktrack_capture.webm"
+
 a.click()
+ 
 }
-
+ 
 }
-
+ 
 startCamera()
-
+ 
 flipBtn.onclick=()=>{
+
 usingFront=!usingFront
+
 startCamera()
-}
 
+}
+ 
 recordBtn.onclick=()=>{
-
-if(recording) return
-
+ 
+if(!recording){
+ 
 chunks=[]
+
 recorder.start()
+ 
 recording=true
-rackStartTime=Date.now()
 
-instructions.innerText="Capture full rack vertically (5s)"
+phase="rack"
+ 
+rackStart=null
+ 
+recordBtn.innerText="■"
+ 
+instructions.innerText="Hold rack vertically"
+ 
+}else{
+ 
+recorder.stop()
+ 
+recording=false
 
+phase="idle"
+ 
+recordBtn.innerText="●"
+ 
+instructions.innerText="Recording stopped"
+ 
 }
-
+ 
+}
+ 
 pauseBtn.onclick=()=>{
-
-if(!recording) return
-
+ 
+if(!recording)return
+ 
 paused=!paused
-
+ 
 if(paused){
+ 
+pauseBtn.innerText="▶"
 
-instructions.innerText="Paused. Move to next unit then resume"
-
+instructions.innerText="Move to next unit then resume"
+ 
 }else{
-
-scanStartTime=Date.now()
-instructions.innerText="Scan unit LEFT → RIGHT"
-
-}
-
-}
-
-function isPortrait(){
-	return window.innerHeight > window.innerWidth;
-}
-
-function update(){
-	drawGuide();
-	if(!recording){
-		requestAnimationFrame(update);
-		return;
-	}
-	let now = Date.now();
-	if(phase === "rack"){
-		if(!isPortrait()){
-			rackStartTime = null;
-			instructions.innerText = "Hold phone vertically";
-			return;
-		}
-		if(!rackStartTime){
-			rackStartTime = Date.now();
-		}
-		let elapsed = Date.now() - rackStartTime;
-		if(elapsed < 4000){
-			instructions.innerText = "Hold rack vertically";
-		}else{
-			phase = "rotate";
-			rackStartTime = null;
-			instructions.innerText = "Rotate phone horizontally";
-		}
-	}
-	else if(phase === "rotate"){
-		if(window.innerWidth > window.innerHeight){
-			phase = "scan";
-			scanStartTime = Date.now();
-			instructions.innerText = "Scan unit LEFT → RIGHT";
-		}
-	}
-	else if(phase === "scan"){
-		detectMotion();
-		let elapsed = (now - scanStartTime) / 1000;
-		if(elapsed > 3){
-			paused = true;
-			instructions.innerText = "✔ Unit captured. Move to next unit then resume";
-		}
-	}
-	requestAnimationFrame(update);
-}
-if(phase==="rack"){
-
-let elapsed=(now-rackStartTime)/1000
-
-if(window.innerHeight>window.innerWidth){
-
-instructions.innerText="✔ Vertical OK. Hold rack for "+(5-Math.floor(elapsed))+"s"
-
-}else{
-
-instructions.innerText="⚠ Hold phone vertically"
-
-}
-
-if(elapsed>5){
-
-phase="rotate"
-
-instructions.innerText="Rotate phone horizontally"
-
-}
-
-}
-
-else if(phase==="rotate"){
-
-if(window.innerWidth>window.innerHeight){
-
+ 
+pauseBtn.innerText="⏸"
+ 
 phase="scan"
 
-scanStartTime=Date.now()
+scanStart=Date.now()
 
-instructions.innerText="Scan unit LEFT → RIGHT"
+prevFrame=null
+ 
+instructions.innerText="Scan next unit LEFT → RIGHT"
+ 
+}
+ 
+}
+ 
+function isPortrait(){
+
+return window.innerHeight>window.innerWidth
 
 }
+ 
+function isLandscape(){
+
+return window.innerWidth>window.innerHeight
 
 }
+ 
+function detectPan(){
+ 
+if(!prevFrame){
+ 
+prevFrame=ctx.getImageData(0,0,canvas.width,canvas.height)
 
-else if(phase==="scan"){
+return true
+ 
+}
+ 
+let frame=ctx.getImageData(0,0,canvas.width,canvas.height)
+ 
+let movement=0
 
-detectMotion()
+let samples=0
+ 
+for(let i=0;i<frame.data.length;i+=40){
+ 
+movement+=frame.data[i]-prevFrame.data[i]
 
-let elapsed=(now-scanStartTime)/1000
+samples++
+ 
+}
+ 
+movement/=samples
+ 
+prevFrame=frame
+ 
+let speed=Math.abs(movement)
+ 
+if(speed<0.3){
+ 
+instructions.innerText="Move camera LEFT → RIGHT"
 
-if(elapsed>3){
+scanStart=Date.now()
 
-paused=true
+return false
+ 
+}
+ 
+if(speed>20){
+ 
+instructions.innerText="Move slower"
 
-instructions.innerText="✔ Unit captured. Move to next unit then resume"
+scanStart=Date.now()
+
+return false
+ 
+}
+ 
+if(movement<0){
+ 
+instructions.innerText="Move LEFT → RIGHT only"
+
+scanStart=Date.now()
+
+return false
+ 
+}
+ 
+return true
+ 
+}
+ 
+function drawRackOverlay(){
+ 
+ctx.strokeStyle="rgba(0,255,150,0.8)"
+
+ctx.lineWidth=3
+ 
+let w=canvas.width*0.7
+
+let h=canvas.height*0.8
+ 
+ctx.strokeRect(
+
+canvas.width/2-w/2,
+
+canvas.height/2-h/2,
+
+w,
+
+h
+
+)
+ 
+}
+ 
+function drawUnits(){
+ 
+let rows=8
+
+let w=canvas.width*0.7
+
+let h=canvas.height*0.8
+ 
+let x=canvas.width/2-w/2
+
+let y=canvas.height/2-h/2
+ 
+let unitHeight=h/rows
+ 
+for(let i=0;i<rows;i++){
+ 
+ctx.strokeStyle="rgba(0,200,255,0.4)"
+ 
+ctx.strokeRect(
+
+x,
+
+y+i*unitHeight,
+
+w,
+
+unitHeight
+
+)
+ 
+}
+ 
+}
+ 
+function drawArrow(){
+ 
+let t=Date.now()/200
+ 
+let x=(Math.sin(t)*0.5+0.5)*canvas.width*0.6+canvas.width*0.2
+ 
+ctx.font="40px sans-serif"
+ 
+ctx.fillStyle="rgba(255,255,255,0.8)"
+ 
+ctx.fillText("→",x,canvas.height/2)
+ 
+}
+ 
+window.addEventListener("devicemotion",e=>{
+ 
+let acc=e.accelerationIncludingGravity
+ 
+shakeLevel=Math.abs(acc.x)+Math.abs(acc.y)+Math.abs(acc.z)
+ 
+})
+ 
+function checkShake(){
+ 
+if(shakeLevel>25){
+ 
+instructions.innerText="Hold camera steady"
+ 
+return false
+ 
+}
+ 
+return true
+ 
+}
+ 
+function update(){
+ 
+ctx.clearRect(0,0,canvas.width,canvas.height)
+ 
+drawRackOverlay()
+
+drawUnits()
+ 
+if(phase==="scan"){
+
+drawArrow()
 
 }
-
-}
+ 
+if(!recording){
 
 requestAnimationFrame(update)
 
+return
 
+}
+ 
+let now=Date.now()
+ 
+if(!checkShake()){
 
+requestAnimationFrame(update)
+
+return
+
+}
+ 
+// RACK CAPTURE
+
+if(phase==="rack"){
+ 
+if(!isPortrait()){
+ 
+instructions.innerText="Hold phone vertically"
+
+rackStart=null
+
+return
+ 
+}
+ 
+if(!rackStart){
+
+rackStart=now
+
+}
+ 
+if(now-rackStart<4000){
+ 
+instructions.innerText="Align full rack"
+ 
+}else{
+ 
+phase="rotate"
+
+instructions.innerText="Rotate phone horizontally"
+ 
+}
+ 
+}
+ 
+// ROTATE
+
+else if(phase==="rotate"){
+ 
+if(!isLandscape()){
+ 
+instructions.innerText="Rotate phone horizontally"
+
+rotateStart=null
+
+return
+ 
+}
+ 
+if(!rotateStart){
+
+rotateStart=now
+
+}
+ 
+if(now-rotateStart>1000){
+ 
+phase="scan"
+
+scanStart=now
+
+prevFrame=null
+ 
+instructions.innerText="Start scanning first unit LEFT → RIGHT"
+ 
+}
+ 
+}
+ 
+// SCAN
+
+else if(phase==="scan"){
+ 
+if(paused)return
+ 
+if(!isLandscape()){
+ 
+instructions.innerText="Hold phone horizontally"
+
+scanStart=now
+
+return
+ 
+}
+ 
+ctx.drawImage(video,0,0,canvas.width,canvas.height)
+ 
+let valid=detectPan()
+ 
+if(!valid)return
+ 
+if(now-scanStart<3000){
+ 
+instructions.innerText="Scanning unit"
+ 
+}else{
+ 
+paused=true
+
+pauseBtn.innerText="▶"
+ 
+phase="waitpause"
+ 
+instructions.innerText="Pause and move to next unit"
+ 
+}
+ 
+}
+ 
+requestAnimationFrame(update)
+ 
+}
+ 
 update()
-
+ 
 </script>
-
+ 
 </body>
 </html>
-
+ 
