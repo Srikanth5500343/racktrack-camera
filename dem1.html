@@ -9,121 +9,70 @@
 <style>
  
 body{
-
 margin:0;
-
 background:black;
-
 color:white;
-
 font-family:system-ui;
-
 overflow:hidden;
-
 }
  
 video{
-
 position:fixed;
-
 width:100%;
-
 height:100%;
-
 object-fit:cover;
-
 }
  
 canvas{
-
 position:fixed;
-
 width:100%;
-
 height:100%;
-
 pointer-events:none;
-
 }
  
 .header{
-
 position:fixed;
-
 top:0;
-
 width:100%;
-
 text-align:center;
-
 padding:14px;
-
 font-size:20px;
-
 font-weight:600;
-
 background:linear-gradient(black,transparent);
-
 }
  
 .instructions{
-
 position:fixed;
-
 bottom:140px;
-
 width:100%;
-
 text-align:center;
-
 font-size:18px;
-
 padding:10px;
-
 }
  
 .controls{
-
 position:fixed;
-
 bottom:30px;
-
 width:100%;
-
 display:flex;
-
 justify-content:center;
-
 gap:40px;
-
 }
  
 button{
-
 border:none;
-
 border-radius:50%;
-
 width:60px;
-
 height:60px;
-
 font-size:22px;
-
 background:rgba(255,255,255,0.2);
-
 color:white;
-
 }
  
 .record{
-
 background:red;
-
 width:80px;
-
 height:80px;
-
 }
  
 </style>
@@ -138,7 +87,6 @@ height:80px;
 <canvas id="canvas"></canvas>
  
 <div id="instructions" class="instructions">
-
 Press record to start
 </div>
  
@@ -153,63 +101,50 @@ Press record to start
 <script>
  
 let video=document.getElementById("video")
-
 let canvas=document.getElementById("canvas")
-
 let ctx=canvas.getContext("2d")
  
 let instructions=document.getElementById("instructions")
  
 let recordBtn=document.getElementById("record")
-
 let pauseBtn=document.getElementById("pause")
-
 let flipBtn=document.getElementById("flip")
  
 canvas.width=window.innerWidth
-
 canvas.height=window.innerHeight
  
 let usingFront=false
-
 let stream
-
 let recorder
-
 let chunks=[]
  
 let recording=false
-
 let paused=false
  
 let phase="idle"
- 
 let rackStart=null
-
 let rotateStart=null
-
 let scanStart=null
  
 let prevFrame=null
-
 let lastPanTime=0
  
 let shakeLevel=0
+
+// NEW: Rack detection variables
+let rackSuccessCount=0
+let rackCheckStart=null
+let rackPixelsSampled=0
  
 async function startCamera(){
  
 if(stream){
-
 stream.getTracks().forEach(t=>t.stop())
-
 }
  
 stream=await navigator.mediaDevices.getUserMedia({
-
 video:{facingMode: usingFront?"user":"environment"},
-
 audio:false
-
 })
  
 video.srcObject=stream
@@ -217,23 +152,17 @@ video.srcObject=stream
 recorder=new MediaRecorder(stream)
  
 recorder.ondataavailable=e=>{
-
 chunks.push(e.data)
-
 }
  
 recorder.onstop=()=>{
  
 let blob=new Blob(chunks,{type:"video/webm"})
-
 let url=URL.createObjectURL(blob)
  
 let a=document.createElement("a")
-
 a.href=url
-
 a.download="racktrack_capture.webm"
-
 a.click()
  
 }
@@ -243,11 +172,8 @@ a.click()
 startCamera()
  
 flipBtn.onclick=()=>{
-
 usingFront=!usingFront
-
 startCamera()
-
 }
  
 recordBtn.onclick=()=>{
@@ -255,29 +181,22 @@ recordBtn.onclick=()=>{
 if(!recording){
  
 chunks=[]
-
 recorder.start()
- 
 recording=true
-
 phase="rack"
- 
 rackStart=null
- 
+rackSuccessCount=0
+rackCheckStart=null
+rackPixelsSampled=0
 recordBtn.innerText="■"
- 
 instructions.innerText="Hold rack vertically"
  
 }else{
  
 recorder.stop()
- 
 recording=false
-
 phase="idle"
- 
 recordBtn.innerText="●"
- 
 instructions.innerText="Recording stopped"
  
 }
@@ -291,19 +210,13 @@ if(!recording)return
 paused=!paused
  
 if(paused){
- 
 pauseBtn.innerText="▶"
-
 instructions.innerText="Move to next unit then resume"
  
 }else{
- 
 pauseBtn.innerText="⏸"
- 
 phase="scan"
-
 scanStart=Date.now()
-
 prevFrame=null
  
 instructions.innerText="Scan next unit LEFT → RIGHT"
@@ -313,39 +226,65 @@ instructions.innerText="Scan next unit LEFT → RIGHT"
 }
  
 function isPortrait(){
-
 return window.innerHeight>window.innerWidth
-
 }
  
 function isLandscape(){
-
 return window.innerWidth>window.innerHeight
-
+}
+ 
+// NEW: Detect if rack fills frame properly
+function detectFullRack(){
+ 
+ctx.drawImage(video,0,0,canvas.width,canvas.height)
+let frameData=ctx.getImageData(0,0,canvas.width,canvas.height)
+let data=frameData.data
+ 
+let edgePixels=0
+let totalPixels=0
+let sampleStep=20 // Sample every 20th pixel for performance
+ 
+// Check frame edges for rack presence (should have rack near edges)
+for(let y=0; y<canvas.height; y+=sampleStep){
+for(let x=0; x<canvas.width; x+=sampleStep){
+ 
+let idx=(y*canvas.width+x)*4
+if(idx<data.length){
+ 
+// Edge regions (within 15% of frame edge)
+let isEdge=(x<canvas.width*0.15 || x>canvas.width*0.85 || 
+            y<canvas.height*0.15 || y>canvas.height*0.85)
+ 
+if(isEdge){
+let brightness=(data[idx]+data[idx+1]+data[idx+2])/3
+// Rack should have good contrast/brightness in edge areas
+if(brightness>30 && brightness<220){
+edgePixels++
+}
+}
+totalPixels++
+}
+}
+}
+ 
+let edgeFillRatio=edgePixels/totalPixels
+return edgeFillRatio>0.4 // Need 40% edge fill for success
 }
  
 function detectPan(){
  
 if(!prevFrame){
- 
 prevFrame=ctx.getImageData(0,0,canvas.width,canvas.height)
-
 return true
- 
 }
  
 let frame=ctx.getImageData(0,0,canvas.width,canvas.height)
- 
 let movement=0
-
 let samples=0
  
 for(let i=0;i<frame.data.length;i+=40){
- 
 movement+=frame.data[i]-prevFrame.data[i]
-
 samples++
- 
 }
  
 movement/=samples
@@ -355,33 +294,21 @@ prevFrame=frame
 let speed=Math.abs(movement)
  
 if(speed<0.3){
- 
 instructions.innerText="Move camera LEFT → RIGHT"
-
 scanStart=Date.now()
-
 return false
- 
 }
  
 if(speed>20){
- 
 instructions.innerText="Move slower"
-
 scanStart=Date.now()
-
 return false
- 
 }
  
 if(movement<0){
- 
 instructions.innerText="Move LEFT → RIGHT only"
-
 scanStart=Date.now()
-
 return false
- 
 }
  
 return true
@@ -389,79 +316,54 @@ return true
 }
  
 function drawRackOverlay(){
- 
 ctx.strokeStyle="rgba(0,255,150,0.8)"
-
 ctx.lineWidth=3
  
 let w=canvas.width*0.7
-
 let h=canvas.height*0.8
  
 ctx.strokeRect(
-
 canvas.width/2-w/2,
-
 canvas.height/2-h/2,
-
 w,
-
 h
-
 )
  
 }
  
 function drawUnits(){
- 
 let rows=8
-
 let w=canvas.width*0.7
-
 let h=canvas.height*0.8
  
 let x=canvas.width/2-w/2
-
 let y=canvas.height/2-h/2
  
 let unitHeight=h/rows
  
 for(let i=0;i<rows;i++){
- 
 ctx.strokeStyle="rgba(0,200,255,0.4)"
- 
 ctx.strokeRect(
-
 x,
-
 y+i*unitHeight,
-
 w,
-
 unitHeight
-
 )
- 
 }
  
 }
  
 function drawArrow(){
- 
 let t=Date.now()/200
  
 let x=(Math.sin(t)*0.5+0.5)*canvas.width*0.6+canvas.width*0.2
  
 ctx.font="40px sans-serif"
- 
 ctx.fillStyle="rgba(255,255,255,0.8)"
- 
 ctx.fillText("→",x,canvas.height/2)
- 
 }
  
 window.addEventListener("devicemotion",e=>{
- 
 let acc=e.accelerationIncludingGravity
  
 shakeLevel=Math.abs(acc.x)+Math.abs(acc.y)+Math.abs(acc.z)
@@ -469,155 +371,119 @@ shakeLevel=Math.abs(acc.x)+Math.abs(acc.y)+Math.abs(acc.z)
 })
  
 function checkShake(){
- 
 if(shakeLevel>25){
- 
 instructions.innerText="Hold camera steady"
- 
 return false
- 
 }
- 
 return true
- 
 }
  
 function update(){
- 
 ctx.clearRect(0,0,canvas.width,canvas.height)
- 
 drawRackOverlay()
-
 drawUnits()
  
 if(phase==="scan"){
-
 drawArrow()
-
 }
  
 if(!recording){
-
 requestAnimationFrame(update)
-
 return
-
 }
  
 let now=Date.now()
  
 if(!checkShake()){
-
 requestAnimationFrame(update)
-
 return
-
 }
  
-// RACK CAPTURE
-
+// RACK CAPTURE - NEW RESTRICTIVE LOGIC
 if(phase==="rack"){
  
 if(!isPortrait()){
- 
 instructions.innerText="Hold phone vertically"
-
 rackStart=null
-
+rackSuccessCount=0
 return
- 
 }
  
 if(!rackStart){
-
 rackStart=now
-
 }
  
 if(now-rackStart<4000){
- 
-instructions.innerText="Align full rack"
- 
+instructions.innerText="Align full rack in frame"
 }else{
  
+// NEW: Check if rack fills frame properly
+let rackDetected=detectFullRack()
+ 
+if(rackDetected){
+rackSuccessCount++
+rackCheckStart=now
+instructions.innerText="✅ Good rack capture! Rotate horizontally"
+ 
+// Success for 2 seconds then allow rotate
+if(now-rackCheckStart>2000 && rackSuccessCount>=3){
 phase="rotate"
-
-instructions.innerText="Rotate phone horizontally"
- 
+rotateStart=null
 }
  
+}else{
+rackSuccessCount=0
+rackCheckStart=null
+instructions.innerText="Capture FULL rack vertically - try again"
+}
+}
 }
  
-// ROTATE
-
+// ROTATE - Only if rack phase succeeded
 else if(phase==="rotate"){
  
 if(!isLandscape()){
- 
 instructions.innerText="Rotate phone horizontally"
-
-rotateStart=null
-
 return
- 
 }
  
 if(!rotateStart){
-
 rotateStart=now
-
 }
  
 if(now-rotateStart>1000){
- 
 phase="scan"
-
 scanStart=now
-
 prevFrame=null
  
 instructions.innerText="Start scanning first unit LEFT → RIGHT"
- 
 }
  
 }
  
 // SCAN
-
 else if(phase==="scan"){
  
 if(paused)return
  
 if(!isLandscape()){
- 
 instructions.innerText="Hold phone horizontally"
-
 scanStart=now
-
 return
- 
 }
  
 ctx.drawImage(video,0,0,canvas.width,canvas.height)
- 
 let valid=detectPan()
  
 if(!valid)return
  
 if(now-scanStart<3000){
- 
 instructions.innerText="Scanning unit"
- 
 }else{
- 
 paused=true
-
 pauseBtn.innerText="▶"
- 
 phase="waitpause"
- 
 instructions.innerText="Pause and move to next unit"
- 
 }
  
 }
@@ -632,4 +498,3 @@ update()
  
 </body>
 </html>
- 
