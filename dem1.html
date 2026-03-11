@@ -787,21 +787,23 @@ function detectPan(){
   const absX = Math.abs(smoothX)
   const absY = Math.abs(avgDy)
 
-  // Determine if motion is dominantly horizontal
-  // Require: horizontal component > 1.8× vertical component
   const isHorizontal = absX > 1.8 * absY
 
-  // wrongDir = moving LEFT (smoothX > +2.5 means scene shifts right → camera moves LEFT)
-  const wrongDir    = smoothX > 2.5
-  // notHorizontal = moving but not left-right (top-to-bottom, diagonal, etc.)
+  // wrongDir = moving LEFT (scene shifts right → camera moves LEFT)
+  const wrongDir      = smoothX > 2.5
+  // notHorizontal = sustained non-horizontal motion (vertical/diagonal)
   const notHorizontal = !isHorizontal && (absX > 0.5 || absY > 0.5)
+  // tooSlow only meaningful when motion IS horizontal — don't flag it otherwise
+  const tooSlow       = isHorizontal && absX < 0.6
+  // tooFast only when horizontal
+  const tooFast       = isHorizontal && absX > 5.5
 
   return {
     motionX: smoothX,
     motionY: avgDy,
     speed:   absX,
-    tooFast: absX > 5.5,
-    tooSlow: absX < 0.6 || !isHorizontal,
+    tooFast,
+    tooSlow,
     wrongDir,
     notHorizontal
   }
@@ -951,6 +953,8 @@ function processScan(now){
 
   // ── Not horizontal (top-to-bottom / diagonal) ─────────────────────────────
   if(pan.notHorizontal){
+    // Always clear stall/fast timers — they're irrelevant while not horizontal
+    stallSince = null; fastSince = null
     if(!notHorizSince) notHorizSince = now
     if(now - notHorizSince > 600){
       notHorizCount++
@@ -985,6 +989,7 @@ function processScan(now){
 
   // ── Wrong direction (panning LEFT instead of RIGHT) ───────────────────────
   if(pan.wrongDir){
+    stallSince = null; fastSince = null
     if(!wrongDirSince) wrongDirSince=now
     if(now-wrongDirSince>400){
       wrongDirCount++
