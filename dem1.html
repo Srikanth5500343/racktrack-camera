@@ -778,8 +778,8 @@ function detectPan(){
   const absX = Math.abs(smoothX)
   const absY = Math.abs(avgDy)
 
-  // Motion is only valid if horizontal component dominates vertical by 2x
-  const isHorizontal = absX > 2.0 * absY && absX > 0.6
+  // Motion is valid horizontal if X dominates Y — ratio 1.2x to tolerate natural hand wobble
+  const isHorizontal = absX > 1.2 * absY && absX > 0.5
 
   const wrongDir = smoothX > 2.5
   // tooSlow = true for EVERYTHING that isn't clean left→right: stationary, vertical, diagonal
@@ -972,13 +972,9 @@ function processScan(now){
 
   if(pan.tooSlow){
     if(!stallSince) stallSince=now
-    if(now-stallSince>3500){
+    if(now-stallSince>5000){
       showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
       showToast('warn','→','Sweep Left → Right','Pan the camera horizontally left to right.')
-      return
-    }
-    if(now-stallSince>1500){
-      showToast('warn','→','Sweep Left → Right','Move camera slowly LEFT → RIGHT.')
       return
     }
   } else { if(stallSince) clearBlock(); stallSince=null }
@@ -1002,12 +998,7 @@ function processScan(now){
   const allDone = covered >= N_ZONES
 
   if(!allDone){
-    const msgs=[
-      'Start from the LEFT — sweep RIGHT →',
-      'Good — keep going RIGHT →',
-      'Almost there — reach the RIGHT end →',
-    ]
-    showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(N_ZONES-1, covered)])
+    // Zones fill silently — no toast during correct sweeping
     return
   }
 
