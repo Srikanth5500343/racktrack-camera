@@ -5,262 +5,221 @@
 <title>RackTrack Capture</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&display=swap');
-
 *{box-sizing:border-box;margin:0;padding:0;}
-
-body{
-  background:#000;color:#fff;
-  font-family:'Barlow Condensed',sans-serif;
-  overflow:hidden;height:100dvh;width:100vw;touch-action:none;
-}
-
+body{background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif;overflow:hidden;width:100vw;height:100dvh;touch-action:none;}
 video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
 canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
 
-/* ══════════════════════════════════════════
-   UI SHELL — rotates 90° for scan phase
-   Phone stays portrait; UI flips to landscape
-══════════════════════════════════════════ */
-#uiShell{
-  position:fixed;inset:0;z-index:10;pointer-events:none;
-  transition:transform 0.55s cubic-bezier(0.4,0,0.2,1),
-             width 0s 0.55s, height 0s 0.55s,
-             top 0s 0.55s, left 0s 0.55s,
-             margin 0s 0.55s;
-}
-
-#uiShell.landscape{
-  transform:rotate(90deg);
-  width:100vh;height:100vw;
-  top:50%;left:50%;
-  margin-top:calc(-50vw);
-  margin-left:calc(-50vh);
-  transition:transform 0.55s cubic-bezier(0.4,0,0.2,1);
-}
-
-/* ── HEADER ── */
-.header{
-  position:absolute;top:0;left:0;right:0;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 18px 16px;
-  background:linear-gradient(180deg,rgba(0,0,0,0.9),transparent);
-  pointer-events:auto;
-}
-.logo{font-weight:800;font-size:18px;letter-spacing:4px;text-transform:uppercase;}
-.logo span{color:#00e5ff;}
-.rec-indicator{display:none;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3b3b;letter-spacing:1px;}
-.rec-dot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
-.rec-indicator.show{display:flex;}
-
-/* ── STEPS ── */
-.steps{
-  position:absolute;top:52px;left:0;right:0;
-  display:flex;justify-content:center;gap:6px;padding:0 20px;
-}
-.step{flex:1;max-width:100px;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#444;transition:all .4s;}
-.step-bar{width:100%;height:3px;background:#222;border-radius:2px;transition:all .4s;}
-.step.active .step-bar{background:#ffcc00;}.step.active{color:#ffcc00;}
-.step.done .step-bar{background:#00ff88;}.step.done{color:#00ff88;}
-
-/* ── ZONE PIPS ── */
-#zoneprogress{position:absolute;top:84px;left:50%;transform:translateX(-50%);display:none;gap:6px;}
-#zoneprogress.show{display:flex;}
-.zp{width:40px;height:5px;border-radius:3px;background:#222;transition:all .35s;}
-.zp.done{background:#00ff88;}
-
-/* ── UNIT COUNTER ── */
-#unitLabel{position:absolute;top:94px;right:18px;display:none;flex-direction:column;align-items:flex-end;gap:1px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#555;text-transform:uppercase;}
-#unitLabel.show{display:flex;}
-#unitNum{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:32px;color:#00e5ff;line-height:1;}
-
-/* ── BLOCKER (inside shell, rotates with UI) ── */
-#blocker{
-  position:absolute;inset:0;display:none;
-  flex-direction:column;align-items:center;justify-content:center;gap:14px;
-  background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);pointer-events:auto;
-}
-#blocker.show{display:flex;}
-.blocker-icon{font-size:52px;animation:bpulse 1.2s ease-in-out infinite;}
-@keyframes bpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
-.blocker-title{font-weight:800;font-size:26px;letter-spacing:2px;text-transform:uppercase;color:#ff4444;text-align:center;}
-.blocker-sub{font-family:'Share Tech Mono',monospace;font-size:13px;color:#ffcc00;text-align:center;line-height:1.75;max-width:80%;}
-
-/* ── TOAST (inside shell, rotates with UI) ── */
-#toast{position:absolute;bottom:116px;left:50%;transform:translateX(-50%);width:88%;max-width:420px;pointer-events:none;}
-.toast-inner{background:rgba(0,0,0,0.82);backdrop-filter:blur(8px);border-radius:8px;padding:11px 14px;display:flex;align-items:flex-start;gap:10px;border-left:3px solid #ffcc00;}
-.toast-inner.ok{border-left-color:#00ff88;}.toast-inner.err{border-left-color:#ff3b3b;}.toast-inner.info{border-left-color:#00e5ff;}
-.toast-icon{font-size:18px;line-height:1;flex-shrink:0;margin-top:1px;}
-.toast-text{flex:1;}
-.toast-label{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;opacity:.55;margin-bottom:2px;}
-.toast-msg{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;line-height:1.3;color:#fff;}
-
-/* ── CONTROLS (inside shell, rotates with UI) ── */
-.controls{
-  position:absolute;bottom:0;left:0;right:0;
-  display:flex;justify-content:center;align-items:center;gap:28px;
-  padding:16px 0 22px;
-  background:linear-gradient(0deg,rgba(0,0,0,0.88),transparent);
-  pointer-events:auto;
-}
-.btn{border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:transform .15s,opacity .2s;-webkit-tap-highlight-color:transparent;position:relative;}
-.btn:active{transform:scale(0.86);}
-.btn-flip{width:52px;height:52px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.18);color:#fff;}
-.btn-pause{width:52px;height:52px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.18);color:#fff;opacity:.3;pointer-events:none;}
-.btn-pause.enabled{opacity:1;pointer-events:auto;}
-.btn-record{width:74px;height:74px;font-size:24px;background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);box-shadow:0 0 0 4px rgba(255,60,60,.22),0 4px 22px rgba(255,0,0,.35);color:#fff;}
-.btn-record.recording{background:radial-gradient(circle at 38% 32%,#444,#1a1a1a);box-shadow:0 0 0 4px rgba(255,255,255,.08);font-size:18px;}
-.btn-record.recording::after{content:'';position:absolute;width:74px;height:74px;border-radius:50%;border:2px solid rgba(255,80,80,.5);animation:recring 1.6s ease-out infinite;}
-@keyframes recring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
-
-/* ══════════════════════════════════════════
-   ROTATE HINT — full-screen portrait overlay
-   Shows BEFORE the UI flips (not rotated itself)
-══════════════════════════════════════════ */
+/* ── ROTATE HINT — always portrait, full screen ── */
 #rotateHint{
-  position:fixed;inset:0;z-index:30;
-  display:none;flex-direction:column;
-  align-items:center;justify-content:center;gap:18px;
-  background:rgba(0,0,0,0.92);backdrop-filter:blur(6px);
+  position:fixed;inset:0;z-index:50;
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  background:rgba(0,0,0,0.93);
 }
 #rotateHint.show{display:flex;}
-
-.rh-device{
-  position:relative;width:80px;height:140px;
-  border:3px solid #ffcc00;border-radius:14px;
-  background:rgba(255,204,0,.06);
-  display:flex;align-items:center;justify-content:center;
-  animation:deviceRot 2.2s ease-in-out infinite;
+.rh-phone{
+  width:70px;height:130px;border:3px solid #ffcc00;border-radius:14px;
+  background:rgba(255,204,0,.07);display:flex;align-items:center;justify-content:center;
+  font-size:28px;color:#00e5ff;
+  animation:phoneTilt 2.2s ease-in-out infinite;
 }
-@keyframes deviceRot{
-  0%  {transform:rotate(0deg);}
-  30% {transform:rotate(90deg);}
-  70% {transform:rotate(90deg);}
-  100%{transform:rotate(0deg);}
-}
-.rh-device::before{
-  content:'';position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
-  width:22px;height:4px;border-radius:2px;background:#ffcc00;opacity:.5;
-}
-.rh-screen-arrow{font-size:26px;color:#00e5ff;}
-
-.rh-title{font-weight:800;font-size:22px;letter-spacing:3px;text-transform:uppercase;color:#ffcc00;text-align:center;}
-
-.rh-steps{display:flex;flex-direction:column;gap:8px;align-items:center;}
-.rh-step{
-  display:flex;align-items:center;gap:10px;
-  font-family:'Share Tech Mono',monospace;font-size:12px;color:#aaa;
-  background:rgba(255,255,255,.04);border-radius:6px;padding:7px 14px;width:270px;
-}
-.rh-step-icon{font-size:20px;flex-shrink:0;}
-
-.rh-countdown{
-  font-family:'Share Tech Mono',monospace;font-size:14px;color:#555;
-  letter-spacing:2px;
-}
+@keyframes phoneTilt{0%{transform:rotate(0)}35%{transform:rotate(90deg)}70%{transform:rotate(90deg)}100%{transform:rotate(0)}}
+.rh-phone::after{content:'';position:absolute;bottom:-28px;font-size:22px;}
+.rh-title{font-weight:800;font-size:22px;letter-spacing:3px;text-transform:uppercase;color:#ffcc00;}
+.rh-rows{display:flex;flex-direction:column;gap:8px;width:280px;}
+.rh-row{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border-radius:6px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#bbb;}
+.rh-row span{font-size:20px;flex-shrink:0;}
+.rh-cd{font-family:'Share Tech Mono',monospace;font-size:14px;color:#555;letter-spacing:2px;}
 
 /* shake vignette */
 #shakeVig{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .2s;}
+
+/* ── ALL UI ELEMENTS — absolutely positioned, JS sets coords ── */
+.ui-el{position:fixed;z-index:20;pointer-events:auto;transition:all .45s cubic-bezier(.4,0,.2,1);}
+
+/* Header bar */
+#hdr{
+  top:0;left:0;right:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 18px 16px;
+  background:linear-gradient(180deg,rgba(0,0,0,.9),transparent);
+}
+.logo{font-weight:800;font-size:18px;letter-spacing:4px;text-transform:uppercase;}
+.logo em{font-style:normal;color:#00e5ff;}
+.rec-dot-wrap{display:none;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3b3b;letter-spacing:1px;}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+.rec-dot-wrap.on{display:flex;}
+
+/* Steps bar */
+#steps{
+  top:54px;left:0;right:0;
+  display:flex;justify-content:center;gap:6px;padding:0 18px;
+}
+.step{flex:1;max-width:100px;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#444;transition:color .4s;}
+.step-bar{width:100%;height:3px;background:#222;border-radius:2px;transition:background .4s;}
+.step.active{color:#ffcc00;}.step.active .step-bar{background:#ffcc00;}
+.step.done{color:#00ff88;}.step.done .step-bar{background:#00ff88;}
+
+/* Zone pips */
+#zones{
+  display:none;
+  align-items:center;gap:6px;
+  /* JS positions this */
+}
+#zones.on{display:flex;}
+.zp{width:38px;height:5px;border-radius:3px;background:#222;transition:background .3s;}
+.zp.done{background:#00ff88;}
+
+/* Unit counter */
+#unitBadge{
+  display:none;
+  flex-direction:column;align-items:flex-end;gap:0;
+  font-family:'Share Tech Mono',monospace;font-size:10px;color:#555;text-transform:uppercase;
+}
+#unitBadge.on{display:flex;}
+#unitNum{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;color:#00e5ff;line-height:1;}
+
+/* Toast guidance */
+#toast{
+  pointer-events:none;
+  /* JS positions bottom edge */
+}
+.t-inner{
+  background:rgba(0,0,0,.84);backdrop-filter:blur(8px);
+  border-radius:8px;padding:11px 14px;
+  display:flex;align-items:flex-start;gap:10px;
+  border-left:3px solid #ffcc00;
+  width:100%;
+}
+.t-inner.ok{border-left-color:#00ff88;}.t-inner.err{border-left-color:#ff3b3b;}.t-inner.info{border-left-color:#00e5ff;}
+.t-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+.t-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;opacity:.55;margin-bottom:2px;}
+.t-msg{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;line-height:1.3;color:#fff;}
+
+/* Controls */
+#ctrl{
+  display:flex;justify-content:center;align-items:center;gap:26px;
+  padding:14px 0 20px;
+  background:linear-gradient(0deg,rgba(0,0,0,.88),transparent);
+  /* JS positions bottom edge */
+}
+.btn{border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:transform .15s,opacity .2s;-webkit-tap-highlight-color:transparent;position:relative;}
+.btn:active{transform:scale(.86);}
+.btn-s{width:52px;height:52px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);color:#fff;}
+.btn-pause{opacity:.3;pointer-events:none;}
+.btn-pause.on{opacity:1;pointer-events:auto;}
+.btn-rec{width:74px;height:74px;font-size:24px;background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);box-shadow:0 0 0 4px rgba(255,60,60,.22),0 4px 22px rgba(255,0,0,.35);color:#fff;}
+.btn-rec.recording{background:radial-gradient(circle at 38% 32%,#444,#1a1a1a);box-shadow:0 0 0 4px rgba(255,255,255,.08);font-size:18px;}
+.btn-rec.recording::after{content:'';position:absolute;width:74px;height:74px;border-radius:50%;border:2px solid rgba(255,80,80,.5);animation:recring 1.6s ease-out infinite;}
+@keyframes recring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+
+/* Blocker */
+#blocker{
+  display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:rgba(0,0,0,.82);backdrop-filter:blur(10px);
+  /* JS sets inset based on mode */
+}
+#blocker.on{display:flex;}
+.bl-icon{font-size:50px;animation:bpulse 1.2s ease-in-out infinite;}
+@keyframes bpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.16)}}
+.bl-title{font-weight:800;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#ff4444;text-align:center;}
+.bl-sub{font-family:'Share Tech Mono',monospace;font-size:13px;color:#ffcc00;text-align:center;line-height:1.8;max-width:280px;}
 </style>
 </head>
 <body>
 
 <div id="shakeVig"></div>
 
-<!-- ROTATE HINT (portrait space, not rotated) -->
+<!-- Rotate hint -->
 <div id="rotateHint">
-  <div class="rh-device">
-    <div class="rh-screen-arrow">→</div>
-  </div>
+  <div class="rh-phone">→</div>
   <div class="rh-title">Now Scan Each Unit</div>
-  <div class="rh-steps">
-    <div class="rh-step"><div class="rh-step-icon">📱</div>Hold phone <strong style="color:#ffcc00">&nbsp;sideways (landscape)</strong></div>
-    <div class="rh-step"><div class="rh-step-icon">→</div>Sweep camera &nbsp;<strong style="color:#00e5ff">LEFT → RIGHT</strong></div>
-    <div class="rh-step"><div class="rh-step-icon">⏸</div>Pause &amp; move to each unit row</div>
+  <div class="rh-rows">
+    <div class="rh-row"><span>📱</span> Hold phone <strong style="color:#ffcc00;margin-left:4px">sideways (landscape)</strong></div>
+    <div class="rh-row"><span>→</span> Sweep camera <strong style="color:#00e5ff;margin-left:4px">LEFT → RIGHT</strong></div>
+    <div class="rh-row"><span>⏸</span> Pause &amp; move to each unit row</div>
   </div>
-  <div class="rh-countdown" id="rhCountdown">Starting in 3…</div>
+  <div class="rh-cd" id="rhCd">Starting in 3…</div>
 </div>
 
-<!-- UI SHELL (everything inside rotates together) -->
-<div id="uiShell">
+<!-- All UI elements (JS repositions for portrait vs landscape) -->
+<div class="ui-el" id="hdr">
+  <div class="logo">Rack<em>Track</em></div>
+  <div class="rec-dot-wrap" id="recDot"><div class="rec-dot"></div>REC</div>
+</div>
 
-  <div class="header">
-    <div class="logo">Rack<span>Track</span></div>
-    <div class="rec-indicator" id="recIndicator"><div class="rec-dot"></div>REC</div>
-  </div>
+<div class="ui-el" id="steps">
+  <div class="step" id="s1"><div class="step-bar"></div><span>Full Rack</span></div>
+  <div class="step" id="s2"><div class="step-bar"></div><span>Unit Scan</span></div>
+  <div class="step" id="s3"><div class="step-bar"></div><span>Complete</span></div>
+</div>
 
-  <div class="steps">
-    <div class="step" id="step1"><div class="step-bar"></div><span>Full Rack</span></div>
-    <div class="step" id="step2"><div class="step-bar"></div><span>Unit Scan</span></div>
-    <div class="step" id="step3"><div class="step-bar"></div><span>Complete</span></div>
-  </div>
+<div class="ui-el" id="zones">
+  <div class="zp" id="zp0"></div><div class="zp" id="zp1"></div>
+  <div class="zp" id="zp2"></div><div class="zp" id="zp3"></div>
+  <div class="zp" id="zp4"></div>
+</div>
 
-  <div id="zoneprogress">
-    <div class="zp" id="zp0"></div><div class="zp" id="zp1"></div>
-    <div class="zp" id="zp2"></div><div class="zp" id="zp3"></div>
-    <div class="zp" id="zp4"></div>
-  </div>
+<div class="ui-el" id="unitBadge">UNIT<div id="unitNum">1</div></div>
 
-  <div id="unitLabel">UNIT<div id="unitNum">1</div></div>
-
-  <!-- Blocker rotates with shell -->
-  <div id="blocker">
-    <div class="blocker-icon" id="blockerIcon">⚠️</div>
-    <div class="blocker-title" id="blockerTitle">Hold On</div>
-    <div class="blocker-sub" id="blockerSub">Follow the instructions.</div>
-  </div>
-
-  <!-- Toast rotates with shell -->
-  <div id="toast">
-    <div class="toast-inner info" id="toastInner">
-      <div class="toast-icon" id="toastIcon">ℹ️</div>
-      <div class="toast-text">
-        <div class="toast-label" id="toastLabel">Instructions</div>
-        <div class="toast-msg" id="toastMsg">Press record to begin</div>
-      </div>
+<div class="ui-el" id="toast" style="pointer-events:none;">
+  <div class="t-inner info" id="tInner">
+    <div class="t-icon" id="tIcon">ℹ️</div>
+    <div>
+      <div class="t-lbl" id="tLbl">Instructions</div>
+      <div class="t-msg" id="tMsg">Press record to begin</div>
     </div>
   </div>
+</div>
 
-  <!-- Controls rotate with shell -->
-  <div class="controls">
-    <button class="btn btn-flip" id="flipBtn">🔄</button>
-    <button class="btn btn-record" id="recordBtn">●</button>
-    <button class="btn btn-pause" id="pauseBtn">⏸</button>
-  </div>
+<div class="ui-el" id="ctrl">
+  <button class="btn btn-s" id="flipBtn">🔄</button>
+  <button class="btn btn-rec" id="recBtn">●</button>
+  <button class="btn btn-s btn-pause" id="pauseBtn">⏸</button>
+</div>
 
-</div><!-- /uiShell -->
+<div class="ui-el" id="blocker">
+  <div class="bl-icon" id="blIcon">⚠️</div>
+  <div class="bl-title" id="blTitle">Hold On</div>
+  <div class="bl-sub" id="blSub">Follow instructions.</div>
+</div>
 
 <video id="video" autoplay playsinline muted></video>
 <canvas id="canvas"></canvas>
 
 <script>
-// ── ELEMENTS ─────────────────────────────────
+// ── ELEMENTS ─────────────────────────────────────────────────────────────────
 const video=document.getElementById('video')
 const canvas=document.getElementById('canvas')
 const ctx=canvas.getContext('2d',{willReadFrequently:true})
-const uiShell=document.getElementById('uiShell')
-const recIndicator=document.getElementById('recIndicator')
-const toastInner=document.getElementById('toastInner')
-const toastIcon=document.getElementById('toastIcon')
-const toastLabel=document.getElementById('toastLabel')
-const toastMsg=document.getElementById('toastMsg')
-const blocker=document.getElementById('blocker')
-const blockerIcon=document.getElementById('blockerIcon')
-const blockerTitle=document.getElementById('blockerTitle')
-const blockerSub=document.getElementById('blockerSub')
 const rotateHint=document.getElementById('rotateHint')
-const rhCountdown=document.getElementById('rhCountdown')
-const zoneprogress=document.getElementById('zoneprogress')
-const unitLabel=document.getElementById('unitLabel')
+const rhCd=document.getElementById('rhCd')
+const hdr=document.getElementById('hdr')
+const stepsEl=document.getElementById('steps')
+const zonesEl=document.getElementById('zones')
+const unitBadge=document.getElementById('unitBadge')
 const unitNum=document.getElementById('unitNum')
-const recordBtn=document.getElementById('recordBtn')
+const toastEl=document.getElementById('toast')
+const tInner=document.getElementById('tInner')
+const tIcon=document.getElementById('tIcon')
+const tLbl=document.getElementById('tLbl')
+const tMsg=document.getElementById('tMsg')
+const ctrlEl=document.getElementById('ctrl')
+const blockerEl=document.getElementById('blocker')
+const blIcon=document.getElementById('blIcon')
+const blTitle=document.getElementById('blTitle')
+const blSub=document.getElementById('blSub')
+const recDot=document.getElementById('recDot')
+const recBtn=document.getElementById('recBtn')
 const pauseBtn=document.getElementById('pauseBtn')
 const flipBtn=document.getElementById('flipBtn')
 const shakeVig=document.getElementById('shakeVig')
 
-// ── STATE ─────────────────────────────────────
+// ── STATE ─────────────────────────────────────────────────────────────────────
 let usingFront=false,stream,recorder,chunks=[]
-let recording=false,paused=false,isLandscapeUI=false
+let recording=false,paused=false,scanMode=false
 let phase='idle'
 let rackPhaseStart=0,rackHoldStart=null,rackGoodStreak=0
 const RACK_HOLD_MS=2500
@@ -270,58 +229,238 @@ let zonesSeen=new Set(),currentUnit=1
 let stallSince=null,wrongDirSince=null,fastSince=null,shakeBlock=false
 let accelMag=0
 
-// Offscreen canvas (prevents draw-flicker)
-const offW=160,offH=120
-const off=document.createElement('canvas')
+// offscreen canvas (no flicker)
+const offW=160,offH=120,off=document.createElement('canvas')
 off.width=offW;off.height=offH
 const offCtx=off.getContext('2d',{willReadFrequently:true})
 
-// ── CAMERA ───────────────────────────────────
+// ── LAYOUT ENGINE ─────────────────────────────────────────────────────────────
+// Instead of CSS rotation, we physically reposition every element
+// for "landscape" layout (tall phone held sideways).
+// In landscape mode: screen W becomes the short axis, H the long axis.
+// We simulate a landscape coordinate system inside the portrait screen:
+//   landscape-X runs bottom→top of phone  (= phone's Y axis reversed)
+//   landscape-Y runs left→right of phone  (= phone's X axis)
+
+function layoutPortrait(){
+  const W=window.innerWidth, H=window.innerHeight
+
+  // Header: full width across top
+  Object.assign(hdr.style,{
+    top:'0',left:'0',right:'0',bottom:'auto',
+    width:'',height:'',
+    flexDirection:'row',
+    transform:'none',
+    padding:'12px 18px 16px',
+    background:'linear-gradient(180deg,rgba(0,0,0,.9),transparent)'
+  })
+
+  // Steps: below header
+  Object.assign(stepsEl.style,{
+    top:'54px',left:'0',right:'0',bottom:'auto',
+    width:'',flexDirection:'row',transform:'none',
+    padding:'0 18px'
+  })
+
+  // Zones: hidden in portrait
+  zonesEl.style.display='none'
+  unitBadge.style.display='none'
+
+  // Toast: above controls
+  const toastW=Math.min(W*0.88,420)
+  Object.assign(toastEl.style,{
+    bottom:'118px',top:'auto',
+    left:((W-toastW)/2)+'px',right:'auto',
+    width:toastW+'px',
+    transform:'none',
+    padding:'0'
+  })
+
+  // Controls: bottom bar
+  Object.assign(ctrlEl.style,{
+    bottom:'0',top:'auto',
+    left:'0',right:'0',
+    width:'',height:'auto',
+    flexDirection:'row',transform:'none',
+    padding:'14px 0 20px',
+    background:'linear-gradient(0deg,rgba(0,0,0,.88),transparent)'
+  })
+
+  // Blocker: full screen
+  Object.assign(blockerEl.style,{
+    top:'0',left:'0',right:'0',bottom:'0',width:'',height:''
+  })
+}
+
+function layoutLandscape(){
+  // Phone is portrait (tall). We render as if rotated 90° CW:
+  // "landscape top" = phone's RIGHT edge
+  // "landscape bottom" = phone's LEFT edge
+  // "landscape left" = phone's BOTTOM edge
+  // "landscape right" = phone's TOP edge
+  //
+  // Implementation: rotate each element 90° CW and reposition
+  // using phone coordinates so it reads correctly when phone is tilted.
+
+  const PW=window.innerWidth   // phone portrait width  (short side)
+  const PH=window.innerHeight  // phone portrait height (long side)
+
+  // In landscape view:
+  //   landscape width  = PH  (the long side becomes horizontal)
+  //   landscape height = PW  (the short side becomes vertical)
+  const LW=PH   // landscape width
+  const LH=PW   // landscape height
+
+  // ── Header: landscape top-left corner
+  // Appears at phone's bottom, rotated so it reads left-to-right in landscape
+  Object.assign(hdr.style,{
+    position:'fixed',
+    // Rotate 90deg CW. Origin at top-left after rotation.
+    // Place it at bottom-left of phone, width = LW (= PH), height = auto
+    bottom:'0', top:'auto', left:'0', right:'auto',
+    width:PH+'px', height:'auto',
+    flexDirection:'row',
+    transform:'rotate(90deg)',
+    transformOrigin:'bottom left',
+    padding:'12px 18px 16px',
+    background:'linear-gradient(180deg,rgba(0,0,0,.9),transparent)'
+  })
+
+  // ── Steps: below landscape header (in landscape = slightly right of phone bottom)
+  // After rotating 90 CW from bottom-left, "below header" in landscape
+  // = moving right along phone's bottom edge
+  const hdrH=58  // estimated header height in landscape
+  Object.assign(stepsEl.style,{
+    position:'fixed',
+    bottom:'0',top:'auto',
+    left:hdrH+'px', right:'auto',
+    width:(PH - hdrH)+'px',
+    flexDirection:'row',
+    transform:'rotate(90deg)',
+    transformOrigin:'bottom left',
+    padding:'0 10px'
+  })
+
+  // ── Zone pips: landscape top area (in phone coords: right side, rotated)
+  if(zonesEl.classList.contains('on')){
+    const pipsW=5*44+4*6  // 5 pips * 38px + gaps
+    Object.assign(zonesEl.style,{
+      position:'fixed',
+      display:'flex',flexDirection:'row',
+      bottom:PW - 100 + 'px',   // near right edge of phone
+      left: Math.round((PH - pipsW)/2) + 'px',
+      right:'auto',top:'auto',
+      transform:'rotate(90deg)',
+      transformOrigin:'bottom left'
+    })
+  }
+
+  // ── Unit badge: landscape top-right
+  if(unitBadge.classList.contains('on')){
+    Object.assign(unitBadge.style,{
+      position:'fixed',
+      display:'flex',
+      bottom: PW - 36 + 'px',
+      right: '0px', left:'auto', top:'auto',
+      transform:'rotate(90deg)',
+      transformOrigin:'bottom right'
+    })
+  }
+
+  // ── Toast: above landscape controls
+  // In landscape "bottom" = phone's left edge
+  // Toast sits above control bar → in phone coords: right of ctrl bar
+  const ctrlH=100  // landscape ctrl bar height
+  const toastH=72  // estimated toast height
+  const toastW=Math.min(LW*0.88, 420)
+  const toastLeft=Math.round((PH - toastW)/2)
+
+  Object.assign(toastEl.style,{
+    position:'fixed',
+    bottom: ctrlH + 16 + 'px',   // in phone coords: distance from left edge
+    top:'auto', right:'auto',
+    left: toastLeft + 'px',
+    width: toastW + 'px',
+    transform:'rotate(90deg)',
+    transformOrigin:'bottom left',
+    padding:'0'
+  })
+
+  // ── Controls: landscape bottom bar
+  // In phone portrait: LEFT edge of screen = landscape bottom
+  Object.assign(ctrlEl.style,{
+    position:'fixed',
+    bottom:'0', top:'auto',
+    left:'0', right:'auto',
+    width: PH + 'px',
+    height:'auto',
+    flexDirection:'row',
+    transform:'rotate(90deg)',
+    transformOrigin:'bottom left',
+    padding:'14px 0 20px',
+    background:'linear-gradient(0deg,rgba(0,0,0,.88),transparent)'
+  })
+
+  // ── Blocker: full screen (still needs rotation so text is readable)
+  Object.assign(blockerEl.style,{
+    position:'fixed',
+    bottom:'0', top:'auto',
+    left:'0', right:'auto',
+    width: PH+'px',
+    height: PW+'px',
+    transform:'rotate(90deg)',
+    transformOrigin:'bottom left'
+  })
+}
+
+function applyLayout(){
+  if(scanMode) layoutLandscape()
+  else layoutPortrait()
+}
+
+window.addEventListener('resize',()=>{ syncCanvas(); applyLayout() })
+applyLayout()
+
+// ── CAMERA ───────────────────────────────────────────────────────────────────
 async function startCamera(){
   if(stream)stream.getTracks().forEach(t=>t.stop())
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:usingFront?'user':'environment'},audio:false})
-    video.srcObject=stream;setupRecorder()
+    video.srcObject=stream; setupRecorder()
   }catch(e){showToast('err','⚠️','Camera Error',e.message)}
 }
 function setupRecorder(){
-  try{recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'})}
-  catch{recorder=new MediaRecorder(stream)}
+  try{recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'})}catch{recorder=new MediaRecorder(stream)}
   recorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)}
   recorder.onstop=()=>{
     const a=document.createElement('a')
     a.href=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))
-    a.download='racktrack_capture.webm';a.click()
+    a.download='racktrack_capture.webm'; a.click()
   }
 }
 startCamera()
 flipBtn.onclick=()=>{usingFront=!usingFront;startCamera()}
 
-// ── UI SHELL ROTATION ─────────────────────────
-function setLandscapeUI(on){
-  isLandscapeUI=on
-  uiShell.classList.toggle('landscape',on)
-}
-
-// ── RECORD / PAUSE ────────────────────────────
-recordBtn.onclick=()=>{
+// ── RECORD / PAUSE ────────────────────────────────────────────────────────────
+recBtn.onclick=()=>{
   if(!recording){
     chunks=[];recorder.start(500)
     recording=true;phase='rack';rackPhaseStart=Date.now()
     rackHoldStart=null;rackGoodStreak=0
-    setLandscapeUI(false)
-    recIndicator.classList.add('show')
-    recordBtn.classList.add('recording');recordBtn.textContent='■'
-    pauseBtn.classList.add('enabled')
+    scanMode=false; applyLayout()
+    recDot.classList.add('on')
+    recBtn.classList.add('recording');recBtn.textContent='■'
+    pauseBtn.classList.add('on')
     updateSteps()
     showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
   }else{
     recorder.stop();recording=false;phase='idle'
-    setLandscapeUI(false)
-    recIndicator.classList.remove('show')
-    recordBtn.classList.remove('recording');recordBtn.textContent='●'
-    pauseBtn.classList.remove('enabled')
-    clearBlock();zoneprogress.classList.remove('show');unitLabel.classList.remove('show')
+    scanMode=false; applyLayout()
+    recDot.classList.remove('on')
+    recBtn.classList.remove('recording');recBtn.textContent='●'
+    pauseBtn.classList.remove('on')
+    clearBlock()
+    zonesEl.classList.remove('on'); unitBadge.classList.remove('on')
     showToast('info','ℹ️','Saved','Recording saved. Press record to start again.')
     updateSteps()
   }
@@ -338,29 +477,29 @@ pauseBtn.onclick=()=>{
     prevFrameData=null;motionBuf=[];zonesSeen=new Set();scanStart=Date.now()
     stallSince=wrongDirSince=fastSince=null
     updateZonePips()
-    showToast('info','→','Scan Unit '+currentUnit,'Sweep camera slowly LEFT → RIGHT across the unit.')
+    showToast('info','→','Scan Unit '+currentUnit,'Sweep camera slowly LEFT → RIGHT.')
   }
 }
 
-// ── TOAST / BLOCKER ──────────────────────────
+// ── TOAST / BLOCKER ───────────────────────────────────────────────────────────
 function showToast(type,icon,label,msg){
-  toastInner.className='toast-inner '+(type==='ok'?'ok':type==='err'?'err':'info')
-  toastIcon.textContent=icon;toastLabel.textContent=label;toastMsg.textContent=msg
+  tInner.className='t-inner '+(type==='ok'?'ok':type==='err'?'err':'info')
+  tIcon.textContent=icon; tLbl.textContent=label; tMsg.textContent=msg
 }
 let _blockActive=false
 function showBlock(icon,title,sub){
-  if(_blockActive&&blockerTitle.textContent===title)return
+  if(_blockActive&&blTitle.textContent===title)return
   _blockActive=true
-  blockerIcon.textContent=icon;blockerTitle.textContent=title;blockerSub.textContent=sub
-  blocker.classList.add('show')
+  blIcon.textContent=icon; blTitle.textContent=title; blSub.textContent=sub
+  blockerEl.classList.add('on')
 }
-function clearBlock(){_blockActive=false;blocker.classList.remove('show')}
+function clearBlock(){_blockActive=false; blockerEl.classList.remove('on')}
 
 function updateSteps(){
   const map={idle:-1,rack:0,'scan-prep':1,scan:1,done:2}
   const cur=map[phase]??-1
   for(let i=0;i<3;i++){
-    const el=document.getElementById('step'+(i+1))
+    const el=document.getElementById('s'+(i+1))
     el.className='step'+(i<cur?' done':i===cur?' active':'')
   }
 }
@@ -368,17 +507,16 @@ function updateZonePips(){
   for(let z=0;z<5;z++)document.getElementById('zp'+z).className='zp'+(zonesSeen.has(z)?' done':'')
 }
 
-// ── FRAME ANALYSIS ───────────────────────────
+// ── FRAME ANALYSIS ────────────────────────────────────────────────────────────
 function grabOff(){offCtx.drawImage(video,0,0,offW,offH);return offCtx.getImageData(0,0,offW,offH)}
 
 function analyzeRackFrame(){
   const d=grabOff().data
   let bright=0,edges=0,total=0
   for(let y=0;y<offH;y+=4){for(let x=0;x<offW;x+=4){
-    const i=(y*offW+x)*4
-    const lum=d[i]*.299+d[i+1]*.587+d[i+2]*.114
+    const i=(y*offW+x)*4,lum=d[i]*.299+d[i+1]*.587+d[i+2]*.114
     bright+=lum;total++
-    if(x+4<offW){const j=(y*offW+x+4)*4;const lr=d[j]*.299+d[j+1]*.587+d[j+2]*.114;if(Math.abs(lum-lr)>18)edges++}
+    if(x+4<offW){const j=(y*offW+x+4)*4,lr=d[j]*.299+d[j+1]*.587+d[j+2]*.114;if(Math.abs(lum-lr)>18)edges++}
   }}
   const b=bright/total
   return{ok:b>18&&b<240&&edges/total>0.05,brightness:b}
@@ -391,20 +529,18 @@ function detectPan(){
   let acc=0,n=0
   for(let y=0;y<offH;y+=3){for(let x=0;x<offW;x+=3){const i=(y*offW+x)*4;acc+=(d1[i]+d1[i+1]+d1[i+2])-(d2[i]+d2[i+1]+d2[i+2]);n++}}
   prevFrameData=frame
-  const raw=acc/n
-  motionBuf.push(raw);if(motionBuf.length>MOTION_BUF)motionBuf.shift()
-  const smooth=motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
-  const speed=Math.abs(smooth)
+  motionBuf.push(acc/n);if(motionBuf.length>MOTION_BUF)motionBuf.shift()
+  const smooth=motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length,speed=Math.abs(smooth)
   return{motion:smooth,speed,tooFast:speed>22,tooSlow:speed<0.8,wrongDir:smooth>2.5}
 }
 
-// ── SENSORS ──────────────────────────────────
+// ── SENSORS ───────────────────────────────────────────────────────────────────
 window.addEventListener('devicemotion',e=>{
   const a=e.accelerationIncludingGravity
   if(a)accelMag=Math.abs(a.x)+Math.abs(a.y)+Math.abs(a.z)
 })
 
-// ── CANVAS DRAWING ───────────────────────────
+// ── CANVAS DRAWING ────────────────────────────────────────────────────────────
 function drawRackGuide(){
   const W=canvas.width,H=canvas.height,t=Date.now()/1000
   const bw=W*.88,bh=H*.86,bx=(W-bw)/2,by=(H-bh)/2
@@ -437,61 +573,58 @@ function updateShakeVig(){
     const a=Math.min(.5,(accelMag-25)/55)
     shakeVig.style.background=`radial-gradient(ellipse at center,transparent 35%,rgba(255,40,40,${a}) 100%)`
     shakeVig.style.opacity='1'
-  }else{shakeVig.style.opacity='0'}
+  }else shakeVig.style.opacity='0'
 }
 
-// ── PHASE: RACK ───────────────────────────────
+// ── PHASE: RACK ───────────────────────────────────────────────────────────────
 function processRack(now){
-  const elapsed=now-rackPhaseStart
-  if(elapsed<2000){showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.');clearBlock();return}
+  if(now-rackPhaseStart<2000){showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.');clearBlock();return}
   const{ok,brightness}=analyzeRackFrame()
   if(ok){
     if(!rackHoldStart)rackHoldStart=now
     rackGoodStreak++
-    const held=now-rackHoldStart
-    const pct=Math.round(Math.min(100,held/RACK_HOLD_MS*100))
-    showToast('ok','✅','Rack in Frame!',`Hold steady… ${pct}%`)
-    clearBlock()
+    const held=now-rackHoldStart,pct=Math.round(Math.min(100,held/RACK_HOLD_MS*100))
+    showToast('ok','✅','Rack in Frame!',`Hold steady… ${pct}%`);clearBlock()
     if(held>=RACK_HOLD_MS&&rackGoodStreak>=4)transitionToScan()
   }else{
     rackHoldStart=null;rackGoodStreak=0
     if(brightness<18){showBlock('🌑','Too Dark','Improve lighting — rack must be clearly visible.');showToast('err','🌑','Too Dark','Move to a brighter area.')}
-    else{showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits in frame top to bottom.');showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')}
+    else{showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits top to bottom.');showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')}
   }
 }
 
-// ── TRANSITION → SCAN (show rotate hint 3s, then flip UI) ─
+// ── TRANSITION: show hint 3s, then switch to landscape UI ────────────────────
 function transitionToScan(){
   if(phase==='scan-prep')return
   phase='scan-prep';clearBlock();updateSteps()
   rotateHint.classList.add('show')
-  let count=3
-  rhCountdown.textContent=`Starting in ${count}…`
+  let count=3; rhCd.textContent='Starting in 3…'
   const tick=setInterval(()=>{
     count--
-    if(count>0){rhCountdown.textContent=`Starting in ${count}…`}
+    if(count>0)rhCd.textContent=`Starting in ${count}…`
     else{
       clearInterval(tick)
       rotateHint.classList.remove('show')
-      // Flip entire UI shell to landscape (90° rotation)
-      setLandscapeUI(true)
+      // Switch to landscape UI mode
+      scanMode=true; applyLayout()
       phase='scan';scanStart=Date.now()
       prevFrameData=null;motionBuf=[];zonesSeen=new Set();currentUnit=1
       stallSince=wrongDirSince=fastSince=null
-      unitLabel.classList.add('show');unitNum.textContent='1'
-      zoneprogress.classList.add('show');pauseBtn.textContent='⏸'
-      updateSteps();updateZonePips()
+      zonesEl.classList.add('on'); unitBadge.classList.add('on')
+      unitNum.textContent='1'
+      pauseBtn.textContent='⏸'
+      updateSteps();updateZonePips();applyLayout()
       showToast('info','→','Scan Unit 1','Hold phone sideways. Sweep camera LEFT → RIGHT.')
     }
   },1000)
 }
 
-// ── PHASE: SCAN ───────────────────────────────
+// ── PHASE: SCAN ───────────────────────────────────────────────────────────────
 function processScan(now){
   if(paused)return
   if(accelMag>32){
     shakeBlock=true
-    showBlock('🤚','Too Shaky','Hold steady. Move slowly and deliberately left to right.')
+    showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
     showToast('err','🤚','Shaking!','Hold camera steady.')
     return
   }
@@ -499,11 +632,10 @@ function processScan(now){
   if(shakeBlock)return
 
   const pan=detectPan()
-
   if(pan.wrongDir){
     if(!wrongDirSince)wrongDirSince=now
     if(now-wrongDirSince>400){
-      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Do not sweep backwards.')
+      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Backwards not allowed.')
       showToast('err','⬅️','Wrong Direction','Only pan LEFT → RIGHT.')
       if(now-wrongDirSince>1200){zonesSeen=new Set();updateZonePips()}
       return
@@ -512,42 +644,34 @@ function processScan(now){
 
   if(pan.tooFast){
     if(!fastSince)fastSince=now
-    if(now-fastSince>400){
-      showBlock('🐇','Too Fast!','Slow down — move the camera slowly for a clear scan.')
-      showToast('err','🐇','Too Fast','Slow down your pan speed.')
-      return
-    }
+    if(now-fastSince>400){showBlock('🐇','Too Fast!','Slow down for a clear scan.');showToast('err','🐇','Too Fast','Slow down your pan.');return}
   }else{if(fastSince)clearBlock();fastSince=null}
 
   if(pan.tooSlow){
     if(!stallSince)stallSince=now
-    if(now-stallSince>3500){showBlock('🐢','Not Moving','Pan the camera slowly from LEFT to RIGHT across the unit.');showToast('warn','🐢','Not Moving','Move camera left to right.');return}
+    if(now-stallSince>3500){showBlock('🐢','Not Moving','Pan the camera slowly LEFT to RIGHT.');showToast('warn','🐢','Not Moving','Move camera left to right.');return}
     if(now-stallSince>1500){showToast('warn','→','Keep Moving','Sweep slowly LEFT → RIGHT.');return}
   }else{if(stallSince)clearBlock();stallSince=null}
 
   clearBlock()
-  const elapsed=now-scanStart
-  const newZone=Math.min(4,Math.floor(elapsed/1400))
+  const elapsed=now-scanStart,newZone=Math.min(4,Math.floor(elapsed/1400))
   if(!zonesSeen.has(newZone)&&!pan.tooSlow){zonesSeen.add(newZone);updateZonePips()}
-
   const covered=zonesSeen.size
-  const msgs=['Sweep RIGHT → keep going…','Good — continue RIGHT →',`${5-covered} zone${5-covered>1?'s':''} left — keep sweeping →`,'Almost done — reach the right end →']
+  const msgs=['Sweep RIGHT → keep going…','Good — continue RIGHT →',`${5-covered} zone${5-covered>1?'s':''} left →`,'Almost done — reach the right end →']
   showToast('info','→','Scanning Unit '+currentUnit,msgs[Math.min(3,covered)])
-
   if(elapsed>7200&&covered>=4){
     zonesSeen=new Set([0,1,2,3,4]);updateZonePips()
-    paused=true;pauseBtn.textContent='▶'
-    currentUnit++;unitNum.textContent=currentUnit
+    paused=true;pauseBtn.textContent='▶';currentUnit++;unitNum.textContent=currentUnit
     clearBlock()
-    showToast('ok','✅','Unit '+(currentUnit-1)+' Done!','Move to the next unit row, then press ▶ to scan it.')
+    showToast('ok','✅','Unit '+(currentUnit-1)+' Done!','Move to next unit row, then press ▶.')
   }
 }
 
-// ── CANVAS SYNC ──────────────────────────────
+// ── CANVAS SYNC ───────────────────────────────────────────────────────────────
 function syncCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
-syncCanvas();window.addEventListener('resize',syncCanvas)
+syncCanvas()
 
-// ── RENDER LOOP ───────────────────────────────
+// ── RENDER LOOP ───────────────────────────────────────────────────────────────
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height)
   updateShakeVig()
