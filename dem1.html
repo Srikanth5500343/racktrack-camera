@@ -2,101 +2,541 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>RackTrack Capture</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;overflow:hidden;background:#111;}
-video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif;touch-action:none;}
 
-/* The wrapper that rotates */
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
+#shakeVig{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .2s;}
+
+/* ══════════════════════════════════════════════
+   UI WRAPPER — same confirmed formula from test
+══════════════════════════════════════════════ */
 #ui{
   position:fixed;
-  z-index:10;
-  background:transparent;
-  /* portrait default */
-  top:0; left:0;
+  top:0;left:0;
   width:100vw;
   height:100vh;
+  z-index:10;
+  pointer-events:none;
+  transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);
 }
-
 #ui.ls{
-  /* 
-    Goal: rotate 90deg CW so portrait phone shows landscape UI.
-    
-    Step 1: rotate(90deg) around top-left → 
-      the box now has its left edge at the top, right edge at the bottom
-      visually it sticks out to the right by (height - width)
-    Step 2: translate to bring it back on screen.
-    
-    After rotate(90deg) from top-left:
-      visual top-left corner is at screen (0,0) -> moves to screen (0, -W) in rotated space
-    
-    Correct formula tested on real devices:
-      translateY(-100vw) rotate(90deg)
-    This means: first rotate, then translate UP by 100vw
-    Because in the NEW (rotated) coordinate system, 
-    the Y axis points left in the original frame.
-  */
-  transform-origin: top left;
-  transform: rotate(90deg) translateY(-100vw);
-  width: 100vh;
-  height: 100vw;
+  transform-origin:top left;
+  transform:rotate(90deg) translateY(-100vw);
+  width:100vh;
+  height:100vw;
 }
 
-/* Content inside */
-.header{
+/* ── HEADER ── */
+#hdr{
   position:absolute;top:0;left:0;right:0;
-  background:rgba(255,0,0,0.7);
-  padding:14px 20px;
-  display:flex;justify-content:space-between;align-items:center;
-  color:white;font-family:sans-serif;font-size:18px;font-weight:bold;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px 18px;
+  background:linear-gradient(180deg,rgba(0,0,0,.92),transparent);
+  pointer-events:auto;
 }
-.controls{
-  position:absolute;bottom:0;left:0;right:0;
-  background:rgba(0,0,255,0.7);
-  padding:16px;
-  display:flex;justify-content:center;gap:30px;align-items:center;
-}
-.toast{
-  position:absolute;bottom:100px;left:50%;transform:translateX(-50%);
-  background:rgba(0,200,0,0.8);
-  padding:12px 20px;border-radius:8px;
-  color:white;font-family:sans-serif;font-size:16px;
-  white-space:nowrap;
-}
-.btn{width:60px;height:60px;border-radius:50%;border:none;font-size:24px;cursor:pointer;}
-.brec{background:red;color:white;}
-.bsm{background:rgba(255,255,255,0.2);color:white;}
+.logo{font-weight:800;font-size:20px;letter-spacing:4px;text-transform:uppercase;}
+.logo em{font-style:normal;color:#00e5ff;}
+#recPill{display:none;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff4444;letter-spacing:1px;}
+#recPill.on{display:flex;}
+.rdot{width:8px;height:8px;border-radius:50%;background:#ff4444;animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
 
-#toggleBtn{
-  position:fixed;top:10px;right:10px;z-index:100;
-  background:#ffcc00;color:#000;border:none;padding:10px 16px;
-  font-size:14px;border-radius:6px;cursor:pointer;font-weight:bold;
+/* ── STEPS ── */
+#steps{
+  position:absolute;top:58px;left:0;right:0;
+  display:flex;justify-content:center;gap:6px;padding:0 20px;
 }
+.step{flex:1;max-width:110px;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#444;transition:color .4s;}
+.sbar{width:100%;height:3px;background:#222;border-radius:2px;transition:background .4s;}
+.step.active{color:#ffcc00;}.step.active .sbar{background:#ffcc00;}
+.step.done{color:#00ff88;}.step.done .sbar{background:#00ff88;}
+
+/* ── ZONE PIPS ── */
+#zones{
+  position:absolute;top:90px;left:50%;transform:translateX(-50%);
+  display:none;gap:6px;
+}
+#zones.on{display:flex;}
+.zp{width:42px;height:5px;border-radius:3px;background:#2a2a2a;transition:background .3s;}
+.zp.done{background:#00ff88;}
+
+/* ── UNIT BADGE ── */
+#unitBadge{
+  position:absolute;top:78px;right:20px;
+  display:none;flex-direction:column;align-items:flex-end;
+  font-family:'Share Tech Mono',monospace;font-size:10px;color:#555;text-transform:uppercase;
+}
+#unitBadge.on{display:flex;}
+#unitNum{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:32px;color:#00e5ff;line-height:1;}
+
+/* ── TOAST ── */
+#toast{
+  position:absolute;
+  bottom:128px;left:50%;
+  transform:translateX(-50%);
+  width:88%;max-width:420px;
+  pointer-events:none;
+}
+.tin{
+  background:rgba(0,0,0,.86);backdrop-filter:blur(8px);
+  border-radius:8px;padding:12px 14px;
+  display:flex;align-items:flex-start;gap:10px;
+  border-left:3px solid #ffcc00;
+}
+.tin.ok{border-left-color:#00ff88;}
+.tin.err{border-left-color:#ff3b3b;}
+.tin.info{border-left-color:#00e5ff;}
+.tico{font-size:18px;flex-shrink:0;margin-top:1px;}
+.tlbl{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;opacity:.55;margin-bottom:2px;}
+.tmsg{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;line-height:1.3;color:#fff;}
+
+/* ── CONTROLS ── */
+#ctrl{
+  position:absolute;bottom:0;left:0;right:0;
+  display:flex;justify-content:center;align-items:center;gap:28px;
+  padding:16px 0 26px;
+  background:linear-gradient(0deg,rgba(0,0,0,.9),transparent);
+  pointer-events:auto;
+}
+.btn{border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:transform .15s,opacity .2s;-webkit-tap-highlight-color:transparent;position:relative;}
+.btn:active{transform:scale(.86);}
+.bsm{width:54px;height:54px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);color:#fff;}
+.bpause{opacity:.3;pointer-events:none;}
+.bpause.on{opacity:1;pointer-events:auto;}
+.brec{width:76px;height:76px;font-size:26px;background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);box-shadow:0 0 0 4px rgba(255,60,60,.22),0 4px 24px rgba(255,0,0,.35);color:#fff;}
+.brec.rec{background:radial-gradient(circle at 38% 32%,#444,#1a1a1a);box-shadow:0 0 0 4px rgba(255,255,255,.08);font-size:18px;}
+.brec.rec::after{content:'';position:absolute;width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,80,80,.5);animation:rring 1.6s ease-out infinite;}
+@keyframes rring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+
+/* ── BLOCKER (inside #ui, rotates with it) ── */
+#blocker{
+  position:absolute;inset:0;
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  background:rgba(0,0,0,.82);backdrop-filter:blur(10px);
+  pointer-events:auto;
+}
+#blocker.on{display:flex;}
+.blico{font-size:52px;animation:bpulse 1.2s ease-in-out infinite;}
+@keyframes bpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.16)}}
+.bltitle{font-weight:800;font-size:26px;letter-spacing:2px;text-transform:uppercase;color:#ff4444;text-align:center;}
+.blsub{font-family:'Share Tech Mono',monospace;font-size:13px;color:#ffcc00;text-align:center;line-height:1.8;max-width:80%;}
+
+/* ══════════════════════════════════════════════
+   ROTATE HINT — outside #ui, always portrait
+══════════════════════════════════════════════ */
+#rotateHint{
+  position:fixed;inset:0;z-index:50;
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  background:rgba(0,0,0,.95);
+}
+#rotateHint.on{display:flex;}
+.rphone{
+  width:68px;height:128px;
+  border:3px solid #ffcc00;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;color:#00e5ff;
+  animation:ptilt 2.4s ease-in-out infinite;
+}
+@keyframes ptilt{
+  0%  {transform:rotate(0deg);}
+  35% {transform:rotate(90deg);}
+  70% {transform:rotate(90deg);}
+  100%{transform:rotate(0deg);}
+}
+.rtitle{font-weight:800;font-size:22px;letter-spacing:3px;text-transform:uppercase;color:#ffcc00;}
+.rsteps{display:flex;flex-direction:column;gap:8px;width:280px;}
+.rstep{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border-radius:6px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#bbb;}
+.rcd{font-family:'Share Tech Mono',monospace;font-size:14px;color:#666;letter-spacing:2px;margin-top:4px;}
 </style>
 </head>
 <body>
-<button id="toggleBtn" onclick="toggle()">ROTATE UI</button>
 
-<div id="ui">
-  <div class="header">
-    <span>RackTrack</span>
-    <span style="color:#ff8">● REC</span>
+<div id="shakeVig"></div>
+
+<!-- Rotate hint: always portrait, shown before scan starts -->
+<div id="rotateHint">
+  <div class="rphone">→</div>
+  <div class="rtitle">Now Scan Each Unit</div>
+  <div class="rsteps">
+    <div class="rstep">📱&nbsp; Hold phone <strong style="color:#ffcc00">sideways (landscape)</strong></div>
+    <div class="rstep">→&nbsp; Sweep camera <strong style="color:#00e5ff">LEFT → RIGHT</strong></div>
+    <div class="rstep">⏸&nbsp; Pause &amp; move to each unit row</div>
   </div>
-  <div class="toast">Sweep camera LEFT → RIGHT</div>
-  <div class="controls">
-    <button class="btn bsm">🔄</button>
-    <button class="btn brec">■</button>
-    <button class="btn bsm">⏸</button>
-  </div>
+  <div class="rcd" id="rcd">Starting in 3…</div>
 </div>
 
+<!-- UI wrapper: rotates 90° for scan phase -->
+<div id="ui">
+
+  <div id="hdr">
+    <div class="logo">Rack<em>Track</em></div>
+    <div id="recPill"><div class="rdot"></div>REC</div>
+  </div>
+
+  <div id="steps">
+    <div class="step" id="s1"><div class="sbar"></div><span>Full Rack</span></div>
+    <div class="step" id="s2"><div class="sbar"></div><span>Unit Scan</span></div>
+    <div class="step" id="s3"><div class="sbar"></div><span>Complete</span></div>
+  </div>
+
+  <div id="zones">
+    <div class="zp" id="zp0"></div><div class="zp" id="zp1"></div>
+    <div class="zp" id="zp2"></div><div class="zp" id="zp3"></div>
+    <div class="zp" id="zp4"></div>
+  </div>
+
+  <div id="unitBadge">UNIT<div id="unitNum">1</div></div>
+
+  <!-- Blocker inside #ui so it rotates with UI -->
+  <div id="blocker">
+    <div class="blico" id="blIco">⚠️</div>
+    <div class="bltitle" id="blTitle">Hold On</div>
+    <div class="blsub" id="blSub">Follow the instructions.</div>
+  </div>
+
+  <div id="toast">
+    <div class="tin info" id="tin">
+      <div class="tico" id="tIco">ℹ️</div>
+      <div>
+        <div class="tlbl" id="tLbl">Instructions</div>
+        <div class="tmsg" id="tMsg">Press record to begin</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ctrl">
+    <button class="btn bsm" id="flipBtn">🔄</button>
+    <button class="btn brec" id="recBtn">●</button>
+    <button class="btn bsm bpause" id="pauseBtn">⏸</button>
+  </div>
+
+</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
 <script>
-let ls=false;
-function toggle(){
-  ls=!ls;
-  document.getElementById('ui').classList.toggle('ls',ls);
-  document.getElementById('toggleBtn').textContent=ls?'BACK TO PORTRAIT':'ROTATE UI';
+const $=id=>document.getElementById(id)
+const video=$('video'),canvas=$('canvas')
+const ctx=canvas.getContext('2d',{willReadFrequently:true})
+const ui=$('ui')
+const rotateHint=$('rotateHint'),rcd=$('rcd')
+const recPill=$('recPill')
+const zonesEl=$('zones'),unitBadge=$('unitBadge'),unitNum=$('unitNum')
+const tin=$('tin'),tIco=$('tIco'),tLbl=$('tLbl'),tMsg=$('tMsg')
+const blockerEl=$('blocker'),blIco=$('blIco'),blTitle=$('blTitle'),blSub=$('blSub')
+const recBtn=$('recBtn'),pauseBtn=$('pauseBtn'),flipBtn=$('flipBtn')
+const shakeVig=$('shakeVig')
+
+// ── State ──────────────────────────────────────
+let usingFront=false,stream,recorder,chunks=[]
+let recording=false,paused=false,scanMode=false
+let phase='idle'
+let rackPhaseStart=0,rackHoldStart=null,rackGoodStreak=0
+const RACK_HOLD_MS=2500
+let scanStart=0,prevFD=null,motionBuf=[]
+let zonesSeen=new Set(),currentUnit=1
+let stallSince=null,wdSince=null,fastSince=null,shakeBlock=false
+let accelMag=0
+
+const off=document.createElement('canvas')
+off.width=160;off.height=120
+const offCtx=off.getContext('2d',{willReadFrequently:true})
+
+// ── Landscape toggle (confirmed working formula) ──
+function setLandscape(on){
+  scanMode=on
+  if(on){
+    ui.style.transformOrigin='top left'
+    ui.style.transform='rotate(90deg) translateY(-100vw)'
+    ui.style.width='100vh'
+    ui.style.height='100vw'
+  }else{
+    ui.style.transform='none'
+    ui.style.width='100vw'
+    ui.style.height='100vh'
+  }
 }
+
+// ── Camera ─────────────────────────────────────
+async function startCam(){
+  if(stream)stream.getTracks().forEach(t=>t.stop())
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:usingFront?'user':'environment'},audio:false})
+    video.srcObject=stream;setupRec()
+  }catch(e){showToast('err','⚠️','Camera',e.message)}
+}
+function setupRec(){
+  try{recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'})}catch{recorder=new MediaRecorder(stream)}
+  recorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)}
+  recorder.onstop=()=>{
+    const a=document.createElement('a')
+    a.href=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))
+    a.download='racktrack.webm';a.click()
+  }
+}
+startCam()
+flipBtn.onclick=()=>{usingFront=!usingFront;startCam()}
+
+// ── Record / Pause ─────────────────────────────
+recBtn.onclick=()=>{
+  if(!recording){
+    chunks=[];recorder.start(500)
+    recording=true;phase='rack';rackPhaseStart=Date.now()
+    rackHoldStart=null;rackGoodStreak=0
+    setLandscape(false)
+    recPill.classList.add('on')
+    recBtn.classList.add('rec');recBtn.textContent='■'
+    pauseBtn.classList.add('on')
+    updateSteps()
+    showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
+  }else{
+    recorder.stop();recording=false;phase='idle'
+    setLandscape(false)
+    recPill.classList.remove('on')
+    recBtn.classList.remove('rec');recBtn.textContent='●'
+    pauseBtn.classList.remove('on')
+    clearBlock()
+    zonesEl.classList.remove('on');unitBadge.classList.remove('on')
+    showToast('info','ℹ️','Done','Recording saved. Press record to start again.')
+    updateSteps()
+  }
+}
+
+pauseBtn.onclick=()=>{
+  if(!recording||phase!=='scan')return
+  paused=!paused
+  if(paused){
+    pauseBtn.textContent='▶';clearBlock()
+    showToast('warn','⏸','Paused','Move to the next unit row, then press ▶.')
+  }else{
+    pauseBtn.textContent='⏸'
+    prevFD=null;motionBuf=[];zonesSeen=new Set();scanStart=Date.now()
+    stallSince=wdSince=fastSince=null
+    updateZonePips()
+    showToast('info','→','Scan Unit '+currentUnit,'Sweep camera slowly LEFT → RIGHT.')
+  }
+}
+
+// ── Toast / Blocker ────────────────────────────
+function showToast(type,ico,lbl,msg){
+  tin.className='tin '+(type==='ok'?'ok':type==='err'?'err':'info')
+  tIco.textContent=ico;tLbl.textContent=lbl;tMsg.textContent=msg
+}
+let _ba=false
+function showBlock(ico,title,sub){
+  if(_ba&&blTitle.textContent===title)return
+  _ba=true
+  blIco.textContent=ico;blTitle.textContent=title;blSub.textContent=sub
+  blockerEl.classList.add('on')
+}
+function clearBlock(){_ba=false;blockerEl.classList.remove('on')}
+
+function updateSteps(){
+  const m={idle:-1,rack:0,'scan-prep':1,scan:1,done:2},cur=m[phase]??-1
+  for(let i=0;i<3;i++){
+    const el=$('s'+(i+1))
+    el.className='step'+(i<cur?' done':i===cur?' active':'')
+  }
+}
+function updateZonePips(){
+  for(let z=0;z<5;z++)$('zp'+z).className='zp'+(zonesSeen.has(z)?' done':'')
+}
+
+// ── Frame analysis ─────────────────────────────
+function grabOff(){offCtx.drawImage(video,0,0,160,120);return offCtx.getImageData(0,0,160,120)}
+
+function analyzeRack(){
+  const d=grabOff().data;let b=0,e=0,n=0
+  for(let y=0;y<120;y+=4)for(let x=0;x<160;x+=4){
+    const i=(y*160+x)*4,l=d[i]*.299+d[i+1]*.587+d[i+2]*.114
+    b+=l;n++
+    if(x+4<160){const j=(y*160+x+4)*4,lr=d[j]*.299+d[j+1]*.587+d[j+2]*.114;if(Math.abs(l-lr)>18)e++}
+  }
+  const br=b/n;return{ok:br>18&&br<240&&e/n>0.05,brightness:br}
+}
+
+function detectPan(){
+  const f=grabOff()
+  if(!prevFD){prevFD=f;return{speed:0,tooFast:false,tooSlow:true,wrongDir:false}}
+  const d1=f.data,d2=prevFD.data;let acc=0,n=0
+  for(let y=0;y<120;y+=3)for(let x=0;x<160;x+=3){const i=(y*160+x)*4;acc+=(d1[i]+d1[i+1]+d1[i+2])-(d2[i]+d2[i+1]+d2[i+2]);n++}
+  prevFD=f
+  motionBuf.push(acc/n);if(motionBuf.length>6)motionBuf.shift()
+  const sm=motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length,sp=Math.abs(sm)
+  return{speed:sp,tooFast:sp>22,tooSlow:sp<0.8,wrongDir:sm>2.5}
+}
+
+// ── Sensors ────────────────────────────────────
+window.addEventListener('devicemotion',e=>{
+  const a=e.accelerationIncludingGravity
+  if(a)accelMag=Math.abs(a.x)+Math.abs(a.y)+Math.abs(a.z)
+})
+
+// ── Canvas drawing ─────────────────────────────
+function drawRackGuide(){
+  const W=canvas.width,H=canvas.height,t=Date.now()/1000
+  const bw=W*.88,bh=H*.86,bx=(W-bw)/2,by=(H-bh)/2
+  ctx.save()
+  ctx.strokeStyle=`rgba(255,204,0,${.5+Math.sin(t*2.5)*.2})`
+  ctx.lineWidth=2;ctx.setLineDash([14,7]);ctx.lineDashOffset=-(t*25)%21
+  ctx.strokeRect(bx,by,bw,bh);ctx.setLineDash([])
+  ctx.strokeStyle='#ffcc00';ctx.lineWidth=2.5
+  ;[[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,sx,sy])=>{
+    ctx.beginPath();ctx.moveTo(cx+sx*20,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+sy*20);ctx.stroke()
+  })
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1
+  for(let r=1;r<8;r++){const ry=by+bh*(r/8);ctx.beginPath();ctx.moveTo(bx,ry);ctx.lineTo(bx+bw,ry);ctx.stroke()}
+  ctx.restore()
+}
+
+function drawScanArrow(){
+  const W=canvas.width,H=canvas.height,t=Date.now()/500
+  ctx.save()
+  ctx.font='bold 50px sans-serif'
+  ctx.fillStyle=`rgba(0,229,255,${.55+Math.sin(t*2)*.3})`
+  ctx.textAlign='center';ctx.textBaseline='middle'
+  ctx.fillText('→',(.5+Math.sin(t)*.38)*W,H*.5)
+  ctx.restore()
+}
+
+function updateShakeVig(){
+  if(accelMag>25){
+    const a=Math.min(.5,(accelMag-25)/55)
+    shakeVig.style.background=`radial-gradient(ellipse at center,transparent 35%,rgba(255,40,40,${a}) 100%)`
+    shakeVig.style.opacity='1'
+  }else shakeVig.style.opacity='0'
+}
+
+// ── Phase: Rack ────────────────────────────────
+function processRack(now){
+  if(now-rackPhaseStart<2000){
+    showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
+    clearBlock();return
+  }
+  const{ok,brightness}=analyzeRack()
+  if(ok){
+    if(!rackHoldStart)rackHoldStart=now
+    rackGoodStreak++
+    const held=now-rackHoldStart,pct=Math.round(Math.min(100,held/RACK_HOLD_MS*100))
+    showToast('ok','✅','Rack in Frame!',`Hold steady… ${pct}%`)
+    clearBlock()
+    if(held>=RACK_HOLD_MS&&rackGoodStreak>=4)transitionToScan()
+  }else{
+    rackHoldStart=null;rackGoodStreak=0
+    if(brightness<18){
+      showBlock('🌑','Too Dark','Improve lighting so the rack is visible.')
+      showToast('err','🌑','Too Dark','Move to a brighter area.')
+    }else{
+      showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits in frame.')
+      showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')
+    }
+  }
+}
+
+// ── Transition: show hint 3s then flip UI ─────
+function transitionToScan(){
+  if(phase==='scan-prep')return
+  phase='scan-prep';clearBlock();updateSteps()
+  rotateHint.classList.add('on')
+  let count=3;rcd.textContent='Starting in 3…'
+  const tick=setInterval(()=>{
+    count--
+    if(count>0){rcd.textContent=`Starting in ${count}…`}
+    else{
+      clearInterval(tick)
+      rotateHint.classList.remove('on')
+      // Apply confirmed landscape transform
+      setLandscape(true)
+      phase='scan';scanStart=Date.now()
+      prevFD=null;motionBuf=[];zonesSeen=new Set();currentUnit=1
+      stallSince=wdSince=fastSince=null
+      zonesEl.classList.add('on');unitBadge.classList.add('on')
+      unitNum.textContent='1';pauseBtn.textContent='⏸'
+      updateSteps();updateZonePips()
+      showToast('info','→','Scan Unit 1','Hold phone sideways. Sweep camera LEFT → RIGHT.')
+    }
+  },1000)
+}
+
+// ── Phase: Scan ────────────────────────────────
+function processScan(now){
+  if(paused)return
+  if(accelMag>32){
+    shakeBlock=true
+    showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
+    showToast('err','🤚','Shaking!','Hold camera steady.')
+    return
+  }
+  if(shakeBlock&&accelMag<20){shakeBlock=false;clearBlock()}
+  if(shakeBlock)return
+
+  const pan=detectPan()
+  if(pan.wrongDir){
+    if(!wdSince)wdSince=now
+    if(now-wdSince>400){
+      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.')
+      showToast('err','⬅️','Wrong Direction','Only pan LEFT → RIGHT.')
+      if(now-wdSince>1200){zonesSeen=new Set();updateZonePips()}
+      return
+    }
+  }else{if(wdSince)clearBlock();wdSince=null}
+
+  if(pan.tooFast){
+    if(!fastSince)fastSince=now
+    if(now-fastSince>400){
+      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
+      showToast('err','🐇','Too Fast','Slow down.');return
+    }
+  }else{if(fastSince)clearBlock();fastSince=null}
+
+  if(pan.tooSlow){
+    if(!stallSince)stallSince=now
+    if(now-stallSince>3500){
+      showBlock('🐢','Not Moving','Pan the camera slowly LEFT to RIGHT.')
+      showToast('warn','🐢','Not Moving','Move camera left to right.');return
+    }
+    if(now-stallSince>1500){showToast('warn','→','Keep Moving','Sweep slowly LEFT → RIGHT.');return}
+  }else{if(stallSince)clearBlock();stallSince=null}
+
+  clearBlock()
+  const elapsed=now-scanStart,nz=Math.min(4,Math.floor(elapsed/1400))
+  if(!zonesSeen.has(nz)&&!pan.tooSlow){zonesSeen.add(nz);updateZonePips()}
+  const cov=zonesSeen.size
+  const msgs=['Sweep RIGHT → keep going…','Good — continue RIGHT →',`${5-cov} zone${5-cov>1?'s':''} left →`,'Almost there — reach the right end →']
+  showToast('info','→','Scanning Unit '+currentUnit,msgs[Math.min(3,cov)])
+  if(elapsed>7200&&cov>=4){
+    zonesSeen=new Set([0,1,2,3,4]);updateZonePips()
+    paused=true;pauseBtn.textContent='▶';currentUnit++;unitNum.textContent=currentUnit
+    clearBlock()
+    showToast('ok','✅','Unit '+(currentUnit-1)+' Done!','Move to next unit row, then press ▶.')
+  }
+}
+
+// ── Canvas sync & render loop ──────────────────
+function syncCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+syncCanvas();window.addEventListener('resize',syncCanvas)
+
+function loop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  updateShakeVig()
+  if(recording&&phase!=='idle'){
+    drawRackGuide()
+    if(phase==='scan'&&!paused)drawScanArrow()
+  }
+  if(recording){
+    const now=Date.now()
+    if(phase==='rack')processRack(now)
+    else if(phase==='scan')processScan(now)
+  }
+  requestAnimationFrame(loop)
+}
+loop()
 </script>
 </body>
 </html>
