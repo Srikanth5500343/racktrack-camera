@@ -449,7 +449,7 @@ recordBtn.onclick = ()=>{
     setLandscape(false)
     recIndicator.classList.add('show')
     recordBtn.classList.add('recording'); recordBtn.textContent = '■'
-    pauseBtn.classList.add('enabled')
+    pauseBtn.classList.remove('enabled')  // disabled until scan phase begins
     updateSteps()
     showToast('info','📐','Step 1 — Full Rack',
       'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
@@ -475,6 +475,7 @@ pauseBtn.onclick = ()=>{
     showToast('warn','⏸','Paused','Move to the next unit row, then press ▶.')
   } else {
     pauseBtn.textContent = '⏸'
+    pauseBtn.classList.remove('enabled')  // locked until all 5 zones done
     prevFrameData = null; motionBuf = []
     zonesSeen = new Set(); scanStart = Date.now()
     stallSince = wrongDirSince = fastSince = null
@@ -616,24 +617,31 @@ function processRack(now){
   }
   const {ok, brightness} = analyzeRackFrame()
   if(ok){
+    // Start hold timer only when rack first detected
     if(!rackHoldStart) rackHoldStart=now
-    rackGoodStreak++
-    const held=now-rackHoldStart
-    const pct=Math.round(Math.min(100,held/RACK_HOLD_MS*100))
-    showToast('ok','✅','Rack in Frame!',`Hold steady… ${pct}%`)
+    const held = now - rackHoldStart
+    const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
+    showToast('ok','✅','Rack in Frame!', `Hold steady… ${pct}%`)
     clearBlock()
-    if(held>=RACK_HOLD_MS && rackGoodStreak>=4) transitionToScan()
+    // Must reach 100% hold — no shortcuts
+    if(held >= RACK_HOLD_MS) transitionToScan()
   } else {
-    rackHoldStart=null; rackGoodStreak=0
-    if(brightness<18){
-      showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
-      showToast('err','🌑','Too Dark','Move to a brighter area.')
+    // Frame lost mid-hold — hard reset to 0%, user must redo full hold
+    if(rackHoldStart !== null){
+      showBlock('📐','Rack Lost!','You moved the camera. Show the FULL rack again and hold still.')
+      showToast('err','📐','Rack Lost — Restarting','Hold still — progress reset to 0%.')
     } else {
-      showBlock('📐','Show Full Rack',
-        'Step back until the ENTIRE rack fits in frame top to bottom.')
-      showToast('warn','📐','Step 1 — Full Rack',
-        'Move back — fit the whole rack in frame.')
+      if(brightness<18){
+        showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
+        showToast('err','🌑','Too Dark','Move to a brighter area.')
+      } else {
+        showBlock('📐','Show Full Rack',
+          'Step back until the ENTIRE rack fits in frame top to bottom.')
+        showToast('warn','📐','Step 1 — Full Rack',
+          'Move back — fit the whole rack in frame.')
+      }
     }
+    rackHoldStart = null  // full reset — must start hold from 0% again
   }
 }
 
@@ -661,6 +669,7 @@ function transitionToScan(){
       unitLabel.classList.add('show')
       unitNum.textContent='1'
       pauseBtn.textContent='⏸'
+      pauseBtn.classList.remove('enabled')  // locked until all 5 zones earned
       updateSteps(); updateZonePips()
       showToast('info','→','Scan Unit 1',
         'Hold phone sideways. Sweep camera LEFT → RIGHT.')
@@ -682,12 +691,16 @@ function processScan(now){
 
   const pan = detectPan()
 
+  // Wrong direction — reset ALL zones, must start over from left
   if(pan.wrongDir){
     if(!wrongDirSince) wrongDirSince=now
     if(now-wrongDirSince>400){
-      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Do not sweep backwards.')
-      showToast('err','⬅️','Wrong Direction','Only pan LEFT → RIGHT.')
-      if(now-wrongDirSince>1200){ zonesSeen=new Set(); updateZonePips() }
+      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Zones reset — start from the left again.')
+      showToast('err','⬅️','Wrong Direction!','Zones reset. Start from the LEFT again.')
+      // Always reset zones on reverse pan
+      zonesSeen=new Set(); updateZonePips()
+      scanStart=now  // restart zone timer too
+      prevFrameData=null; motionBuf=[]
       return
     }
   } else { if(wrongDirSince) clearBlock(); wrongDirSince=null }
@@ -715,27 +728,46 @@ function processScan(now){
   } else { if(stallSince) clearBlock(); stallSince=null }
 
   clearBlock()
-  const elapsed=now-scanStart
-  const newZone=Math.min(4,Math.floor(elapsed/1400))
-  if(!zonesSeen.has(newZone) && !pan.tooSlow){ zonesSeen.add(newZone); updateZonePips() }
 
-  const covered=zonesSeen.size
-  const msgs=[
-    'Sweep RIGHT → keep going…',
-    'Good — continue RIGHT →',
-    `${5-covered} zone${5-covered>1?'s':''} left →`,
-    'Almost there — reach the right end →'
-  ]
-  showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(3,covered)])
-
-  if(elapsed>7200 && covered>=4){
-    zonesSeen=new Set([0,1,2,3,4]); updateZonePips()
-    paused=true; pauseBtn.textContent='▶'
-    currentUnit++; unitNum.textContent=currentUnit
-    clearBlock()
-    showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
-      'Move to next unit row, then press ▶.')
+  // Zones only advance with REAL motion — not by time alone
+  // Camera must be actively moving right at a valid speed
+  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
+    const elapsed = now - scanStart
+    // Each zone requires ~1.4s of continuous valid rightward motion
+    const earnedZone = Math.min(4, Math.floor(elapsed / 1400))
+    if(!zonesSeen.has(earnedZone)){
+      zonesSeen.add(earnedZone)
+      updateZonePips()
+    }
   }
+
+  const covered = zonesSeen.size
+  const allDone = covered >= 5
+
+  if(!allDone){
+    const msgs=[
+      'Start from the LEFT — sweep RIGHT →',
+      'Good — keep going RIGHT →',
+      `${5-covered} zone${5-covered>1?'s':''} left — keep sweeping →`,
+      'Almost there — reach the RIGHT end →',
+      'Hold at the right end a moment…'
+    ]
+    showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(4,covered)])
+    // Keep pause button LOCKED until all 5 zones are covered
+    pauseBtn.classList.remove('enabled')
+    return
+  }
+
+  // All 5 zones confirmed — unit complete, now allow pause
+  updateZonePips()
+  pauseBtn.classList.add('enabled')
+  paused=true
+  pauseBtn.textContent='▶'
+  currentUnit++
+  unitNum.textContent=currentUnit
+  clearBlock()
+  showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
+    'Move to next unit row, then press ▶.')
 }
 
 // ── Canvas sync ───────────────────────────────────────────────────────────────
