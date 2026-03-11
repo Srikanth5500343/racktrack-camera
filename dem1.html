@@ -151,11 +151,47 @@ canvas{
   position:absolute;
   top:88px;left:50%;
   transform:translateX(-50%);
-  display:none;gap:5px;
+  display:none;gap:8px;
 }
 #zoneprogress.show{display:flex;}
-.zp{width:36px;height:5px;border-radius:3px;background:#222;transition:all 0.3s;}
+.zp{width:60px;height:5px;border-radius:3px;background:#222;transition:all 0.3s;}
 .zp.done{background:#00ff88;}
+
+/* ── FAILED OVERLAY ── */
+#failedOverlay{
+  position:absolute;inset:0;
+  z-index:25;
+  display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  background:rgba(0,0,0,0.92);backdrop-filter:blur(10px);
+  pointer-events:auto;
+}
+#failedOverlay.show{display:flex;}
+.fail-icon{font-size:60px;}
+.fail-title{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800;font-size:26px;
+  letter-spacing:2px;text-transform:uppercase;
+  color:#ff4444;text-align:center;
+}
+.fail-msg{
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;color:#ffcc00;
+  text-align:center;line-height:1.8;
+  max-width:80%;
+}
+.fail-btn{
+  margin-top:8px;
+  background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);
+  color:#fff;border:none;border-radius:30px;
+  padding:14px 32px;
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;font-size:18px;letter-spacing:2px;
+  cursor:pointer;
+  box-shadow:0 4px 20px rgba(255,0,0,0.35);
+  -webkit-tap-highlight-color:transparent;
+}
+.fail-btn:active{transform:scale(0.95);}
 
 /* ── UNIT COUNTER ── */
 #unitLabel{
@@ -309,9 +345,9 @@ canvas{
   </div>
 
   <div id="zoneprogress">
-    <div class="zp" id="zp0"></div><div class="zp" id="zp1"></div>
-    <div class="zp" id="zp2"></div><div class="zp" id="zp3"></div>
-    <div class="zp" id="zp4"></div>
+    <div class="zp" id="zp0"></div>
+    <div class="zp" id="zp1"></div>
+    <div class="zp" id="zp2"></div>
   </div>
 
   <div id="unitLabel">UNIT<div id="unitNum">1</div></div>
@@ -321,6 +357,14 @@ canvas{
     <div class="blocker-icon" id="blockerIcon">⚠️</div>
     <div class="blocker-title" id="blockerTitle">Hold On</div>
     <div class="blocker-sub" id="blockerSub">Follow instructions.</div>
+  </div>
+
+  <!-- Failed overlay: shown when user moves without completing 100% -->
+  <div id="failedOverlay">
+    <div class="fail-icon">❌</div>
+    <div class="fail-title">Capture Incomplete</div>
+    <div class="fail-msg" id="failMsg">You didn't capture the full rack frame. Please record again.</div>
+    <button class="fail-btn" id="recordAgainBtn">● Record Again</button>
   </div>
 
   <div id="toast">
@@ -364,6 +408,9 @@ const blocker     = document.getElementById('blocker')
 const blockerIcon = document.getElementById('blockerIcon')
 const blockerTitle= document.getElementById('blockerTitle')
 const blockerSub  = document.getElementById('blockerSub')
+const failedOverlay    = document.getElementById('failedOverlay')
+const failMsg          = document.getElementById('failMsg')
+const recordAgainBtn   = document.getElementById('recordAgainBtn')
 const recordBtn   = document.getElementById('recordBtn')
 const pauseBtn    = document.getElementById('pauseBtn')
 const flipBtn     = document.getElementById('flipBtn')
@@ -383,6 +430,7 @@ let rackGoodStreak= 0
 const RACK_HOLD_MS= 2500
 
 // Scan phase
+const N_ZONES     = 3
 let scanStart     = 0
 let prevFrameData = null
 let motionBuf     = []
@@ -439,6 +487,25 @@ function setupRecorder(){
 startCamera()
 flipBtn.onclick = ()=>{ usingFront=!usingFront; startCamera() }
 
+// "Record Again" button on failed overlay
+recordAgainBtn.onclick = ()=>{
+  failedOverlay.classList.remove('show')
+  clearBlock()
+  // Restart recording fresh
+  chunks = []; recorder.start(500)
+  recording = true; phase = 'rack'
+  rackPhaseStart = Date.now()
+  rackHoldStart = null
+  setLandscape(false)
+  recIndicator.classList.add('show')
+  recIndicator.style.opacity = '1'
+  recordBtn.classList.add('recording'); recordBtn.textContent = '■'
+  pauseBtn.classList.remove('enabled')
+  updateSteps()
+  showToast('info','📐','Step 1 — Full Rack',
+    'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
+}
+
 // ── Record / Pause ────────────────────────────────────────────────────────────
 recordBtn.onclick = ()=>{
   if(!recording){
@@ -460,6 +527,7 @@ recordBtn.onclick = ()=>{
     recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
     pauseBtn.classList.remove('enabled')
     clearBlock()
+    failedOverlay.classList.remove('show')
     zoneprogress.classList.remove('show')
     unitLabel.classList.remove('show')
     showToast('info','ℹ️','Saved','Recording saved. Press record to start again.')
@@ -515,7 +583,7 @@ function updateSteps(){
   }
 }
 function updateZonePips(){
-  for(let z=0;z<5;z++)
+  for(let z=0;z<N_ZONES;z++)
     document.getElementById('zp'+z).className = 'zp'+(zonesSeen.has(z)?' done':'')
 }
 
@@ -617,41 +685,51 @@ function processRack(now){
   }
   const {ok, brightness} = analyzeRackFrame()
   if(ok){
-    // Rack is back in frame — resume recording if it was paused
+    // Rack good — resume recorder if it had been paused briefly
     if(recorder.state === 'paused'){
       recorder.resume()
       recIndicator.style.opacity = '1'
     }
-    // Start hold timer only when rack first detected
     if(!rackHoldStart) rackHoldStart = now
     const held = now - rackHoldStart
     const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
     showToast('ok','✅','Rack in Frame!', `Hold steady… ${pct}%`)
     clearBlock()
-    // Must reach 100% uninterrupted hold — no shortcuts
     if(held >= RACK_HOLD_MS) transitionToScan()
   } else {
-    // Frame lost — PAUSE recording so bad frames are not saved
-    if(recorder.state === 'recording'){
-      recorder.pause()
-      recIndicator.style.opacity = '0.3'  // dim REC pill to show paused
-    }
-    // Hard reset hold — user must redo full hold from 0%
+    // Frame lost — STOP recording entirely, show failed screen
     if(rackHoldStart !== null){
-      // Was in progress — tell user explicitly
-      showBlock('📐','Show Full Rack Again','Recording paused. Fit the ENTIRE rack in frame and hold still to continue.')
-      showToast('err','📐','Rack Lost — Recording Paused','Show the full rack again to resume.')
+      // Was mid-hold — user moved before 100%, stop and fail
+      stopAndFail('You moved the camera before capturing the full frame.\nPlease record again from the beginning.')
     } else {
+      // Not yet started hold — just guide them
       if(brightness < 18){
         showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
         showToast('err','🌑','Too Dark','Move to a brighter area.')
       } else {
-        showBlock('📐','Show Full Rack','Recording paused. Step back until the ENTIRE rack fits in frame top to bottom.')
-        showToast('warn','📐','Recording Paused','Move back — fit the whole rack in frame.')
+        showBlock('📐','Show Full Rack',
+          'Step back until the ENTIRE rack fits in frame top to bottom.')
+        showToast('warn','📐','Step 1 — Full Rack',
+          'Move back — fit the whole rack in frame.')
       }
     }
-    rackHoldStart = null  // full reset — must hold from 0% again
+    rackHoldStart = null
   }
+}
+
+function stopAndFail(msg){
+  // Stop recording completely
+  if(recorder.state !== 'inactive') recorder.stop()
+  recording = false; phase = 'idle'
+  chunks = []  // discard bad recording
+  recIndicator.classList.remove('show')
+  recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
+  pauseBtn.classList.remove('enabled')
+  clearBlock()
+  setLandscape(false)
+  // Show failed overlay
+  failMsg.textContent = msg
+  failedOverlay.classList.add('show')
 }
 
 // ── Transition: hint 3s → auto rotate UI → scan ───────────────────────────────
@@ -709,7 +787,7 @@ function processScan(now){
     if(now-wrongDirSince>400){
       showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Zones reset — start from the left again.')
       showToast('err','⬅️','Wrong Direction!','Zones reset. Start from the LEFT again.')
-      // Always reset zones on reverse pan
+      // Always reset all zones on reverse pan
       zonesSeen=new Set(); updateZonePips()
       scanStart=now  // restart zone timer too
       prevFrameData=null; motionBuf=[]
@@ -746,7 +824,7 @@ function processScan(now){
   if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
     const elapsed = now - scanStart
     // Each zone requires ~1.4s of continuous valid rightward motion
-    const earnedZone = Math.min(4, Math.floor(elapsed / 1400))
+    const earnedZone = Math.min(N_ZONES-1, Math.floor(elapsed / 1400))
     if(!zonesSeen.has(earnedZone)){
       zonesSeen.add(earnedZone)
       updateZonePips()
@@ -754,23 +832,21 @@ function processScan(now){
   }
 
   const covered = zonesSeen.size
-  const allDone = covered >= 5
+  const allDone = covered >= N_ZONES
 
   if(!allDone){
     const msgs=[
       'Start from the LEFT — sweep RIGHT →',
       'Good — keep going RIGHT →',
-      `${5-covered} zone${5-covered>1?'s':''} left — keep sweeping →`,
       'Almost there — reach the RIGHT end →',
-      'Hold at the right end a moment…'
     ]
-    showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(4,covered)])
-    // Keep pause button LOCKED until all 5 zones are covered
+    showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(N_ZONES-1, covered)])
+    // Keep pause button LOCKED until all zones are covered
     pauseBtn.classList.remove('enabled')
     return
   }
 
-  // All 5 zones confirmed — unit complete, now allow pause
+  // All 3 zones confirmed — unit complete
   updateZonePips()
   pauseBtn.classList.add('enabled')
   paused=true
