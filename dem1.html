@@ -431,6 +431,7 @@ const RACK_HOLD_MS = 2500
 // Scan phase
 const N_ZONES      = 3
 let scanStart      = 0
+let horizAccum     = 0       // accumulated horizontal distance for zone tracking
 let prevFrameData  = null
 let motionBuf      = []
 const MOTION_BUF   = 6
@@ -549,7 +550,7 @@ pauseBtn.onclick = ()=>{
     pauseBtn.textContent = '⏸'
     // Reset scan state for the new unit row
     prevFrameData = null; motionBuf = []
-    zonesSeen = new Set(); scanStart = Date.now()
+    zonesSeen = new Set(); horizAccum = 0; scanStart = Date.now()
     wrongDirSince = null; wrongDirCount = 0
     
     fastSince = null; stallSince = null
@@ -725,61 +726,51 @@ function detectPan(){
   const frame = grabOff()
   if(!prevFrameData){
     prevFrameData = frame
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false:false }
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false }
   }
 
   const d1 = frame.data
   const d2 = prevFrameData.data
   prevFrameData = frame
 
-  // Helper: luminance of pixel at (x,y) in a flat RGBA array
   function lum(d, x, y){
     if(x<0||x>=offW||y<0||y>=offH) return 0
     const i=(y*offW+x)*4
     return d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
   }
 
-  // For each block in a sparse grid, find the shift (dx,dy) that minimises SAD
   let totalDx=0, totalDy=0, blockCount=0
-  const stepX = BLOCK*2, stepY = BLOCK*2   // sparse grid — every other block
+  const stepX = BLOCK*2, stepY = BLOCK*2
   for(let by=BLOCK; by<offH-BLOCK; by+=stepY){
     for(let bx=BLOCK; bx<offW-BLOCK; bx+=stepX){
       let bestSAD=Infinity, bestDx=0, bestDy=0
       for(let dy=-SEARCH; dy<=SEARCH; dy++){
         for(let dx=-SEARCH; dx<=SEARCH; dx++){
           let sad=0
-          // Sample 5x5 points within the block (fast)
           for(let sy=0; sy<BLOCK; sy+=3){
             for(let sx=0; sx<BLOCK; sx+=3){
               sad += Math.abs(
-                lum(d1, bx+sx,       by+sy      ) -
-                lum(d2, bx+sx+dx,    by+sy+dy   )
+                lum(d1, bx+sx,    by+sy   ) -
+                lum(d2, bx+sx+dx, by+sy+dy)
               )
             }
           }
           if(sad < bestSAD){ bestSAD=sad; bestDx=dx; bestDy=dy }
         }
       }
-      // Only count blocks with meaningful motion (filter static background)
-      if(bestSAD > 80){
-        totalDx += bestDx
-        totalDy += bestDy
-        blockCount++
-      }
+      if(bestSAD > 80){ totalDx+=bestDx; totalDy+=bestDy; blockCount++ }
     }
   }
 
   if(blockCount === 0){
-    // No moving blocks — scene is static
     motionBuf.push(0)
     if(motionBuf.length>MOTION_BUF) motionBuf.shift()
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false:false }
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false }
   }
 
-  const avgDx = totalDx / blockCount   // + = rightward pan
-  const avgDy = totalDy / blockCount   // + = downward tilt
+  const avgDx = totalDx / blockCount
+  const avgDy = totalDy / blockCount
 
-  // Buffer horizontal motion for smoothing
   motionBuf.push(avgDx)
   if(motionBuf.length>MOTION_BUF) motionBuf.shift()
   const smoothX = motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
@@ -787,23 +778,15 @@ function detectPan(){
   const absX = Math.abs(smoothX)
   const absY = Math.abs(avgDy)
 
-  const isHorizontal = absX > 1.8 * absY
+  // Motion is only valid if horizontal component dominates vertical by 2x
+  const isHorizontal = absX > 2.0 * absY && absX > 0.6
 
-  const wrongDir      = smoothX > 2.5
-  const = !isHorizontal && (absX > 0.5 || absY > 0.5)
-  // tooSlow = true whenever the camera is NOT making valid leftward progress:
-  // covers stationary, vertical, diagonal — anything that isn't a clean left→right sweep
-  const tooSlow       = !isHorizontal || absX < 0.6
-  const tooFast       = isHorizontal && absX > 5.5
+  const wrongDir = smoothX > 2.5
+  // tooSlow = true for EVERYTHING that isn't clean left→right: stationary, vertical, diagonal
+  const tooSlow  = !isHorizontal
+  const tooFast  = isHorizontal && absX > 5.5
 
-  return {
-    motionX: smoothX,
-    motionY: avgDy,
-    speed:   absX,
-    tooFast,
-    tooSlow,
-    wrongDir
-  }
+  return { motionX:smoothX, motionY:avgDy, speed:absX, tooFast, tooSlow, wrongDir }
 }
 
 // ── Sensors ───────────────────────────────────────────────────────────────────
@@ -913,7 +896,7 @@ function transitionToScan(){
       setLandscape(true)
       phase='scan'; scanStart=Date.now()
       prevFrameData=null; motionBuf=[]
-      zonesSeen=new Set(); currentUnit=1
+      zonesSeen=new Set(); horizAccum=0; currentUnit=1
       wrongDirSince=null; wrongDirCount=0
       fastSince=null; stallSince=null
       zoneprogress.classList.add('show')
@@ -956,7 +939,7 @@ function processScan(now){
           'You must sweep LEFT → RIGHT only.\nZones reset — start from the left again.')
         showToast('err','⬅️','Wrong Direction!',
           'Pan LEFT → RIGHT only. Zones reset — start over from the left.')
-        zonesSeen=new Set(); updateZonePips()
+        zonesSeen=new Set(); horizAccum=0; updateZonePips()
         scanStart=now
         prevFrameData=null; motionBuf=[]
         wrongDirSince=null
@@ -1002,10 +985,13 @@ function processScan(now){
 
   clearBlock()
 
-  // Advance zones only with valid rightward horizontal motion
-  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir && !pan.){
-    const elapsed = now - scanStart
-    const earnedZone = Math.min(N_ZONES-1, Math.floor(elapsed / 1400))
+  // Advance zones only by accumulating REAL rightward horizontal distance.
+  // Each zone requires the camera to have swept ~ZONE_DIST units of horizontal motion.
+  // Vertical / diagonal motion contributes ZERO — it cannot fill zones.
+  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
+    horizAccum += pan.speed   // only reaches here when isHorizontal is true
+    const ZONE_DIST = 28      // tune: total sweep distance split across N_ZONES
+    const earnedZone = Math.min(N_ZONES-1, Math.floor(horizAccum / ZONE_DIST))
     if(!zonesSeen.has(earnedZone)){
       zonesSeen.add(earnedZone)
       updateZonePips()
@@ -1028,7 +1014,7 @@ function processScan(now){
   // All zones done — unit complete, keep recording continuously, reset for next unit
   currentUnit++
   unitNum.textContent = currentUnit
-  zonesSeen = new Set(); updateZonePips()
+  zonesSeen = new Set(); horizAccum = 0; updateZonePips()
   scanStart = Date.now()
   prevFrameData = null; motionBuf = []
   wrongDirSince = null; wrongDirCount = 0
