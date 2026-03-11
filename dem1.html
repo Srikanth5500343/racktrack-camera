@@ -408,9 +408,9 @@ const blocker     = document.getElementById('blocker')
 const blockerIcon = document.getElementById('blockerIcon')
 const blockerTitle= document.getElementById('blockerTitle')
 const blockerSub  = document.getElementById('blockerSub')
-const failedOverlay    = document.getElementById('failedOverlay')
-const failMsg          = document.getElementById('failMsg')
-const recordAgainBtn   = document.getElementById('recordAgainBtn')
+const failedOverlay  = document.getElementById('failedOverlay')
+const failMsg        = document.getElementById('failMsg')
+const recordAgainBtn = document.getElementById('recordAgainBtn')
 const recordBtn   = document.getElementById('recordBtn')
 const pauseBtn    = document.getElementById('pauseBtn')
 const flipBtn     = document.getElementById('flipBtn')
@@ -424,32 +424,34 @@ let paused        = false
 let phase         = 'idle'   // idle | rack | scan-prep | scan
 
 // Rack phase
-let rackPhaseStart= 0
-let rackHoldStart = null
-let rackGoodStreak= 0
-const RACK_HOLD_MS= 2500
+let rackPhaseStart = 0
+let rackHoldStart  = null
+const RACK_HOLD_MS = 2500
 
 // Scan phase
-const N_ZONES     = 3
-let scanStart     = 0
-let prevFrameData = null
-let motionBuf     = []
-const MOTION_BUF  = 6
-let zonesSeen     = new Set()
-let currentUnit   = 1
-let stallSince    = null
-let wrongDirSince = null
-let fastSince     = null
-let shakeBlock    = false
-let accelMag      = 0
+const N_ZONES      = 3
+let scanStart      = 0
+let prevFrameData  = null
+let motionBuf      = []
+const MOTION_BUF   = 6
+let zonesSeen      = new Set()
+let currentUnit    = 1
 
-// Offscreen canvas — keeps frame analysis off the visible canvas (no flicker)
+// Scan direction enforcement
+let wrongDirSince  = null
+let wrongDirCount  = 0       // how many times user went wrong direction this unit
+let fastSince      = null
+let stallSince     = null
+let shakeBlock     = false
+let accelMag       = 0
+
+// Offscreen canvas for frame analysis (no flicker on visible canvas)
 const offW = 160, offH = 120
 const off  = document.createElement('canvas')
 off.width  = offW; off.height = offH
 const offCtx = off.getContext('2d', {willReadFrequently:true})
 
-// ── Landscape UI (auto, no user button) ───────────────────────────────────────
+// ── Landscape UI ─────────────────────────────────────────────────────────────
 function setLandscape(on){
   if(on){
     ui.style.transformOrigin = 'top left'
@@ -479,6 +481,7 @@ function setupRecorder(){
   catch{ recorder = new MediaRecorder(stream) }
   recorder.ondataavailable = e=>{ if(e.data.size>0) chunks.push(e.data) }
   recorder.onstop = ()=>{
+    if(chunks.length === 0) return   // discarded (failed capture)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))
     a.download = 'racktrack.webm'; a.click()
@@ -487,41 +490,36 @@ function setupRecorder(){
 startCamera()
 flipBtn.onclick = ()=>{ usingFront=!usingFront; startCamera() }
 
-// "Record Again" button on failed overlay
-recordAgainBtn.onclick = ()=>{
-  failedOverlay.classList.remove('show')
-  clearBlock()
-  // Restart recording fresh
-  chunks = []; recorder.start(500)
+// ── Helpers to start / reset a recording session ──────────────────────────────
+function beginRecording(){
+  chunks = []
+  recorder.start(500)
   recording = true; phase = 'rack'
   rackPhaseStart = Date.now()
-  rackHoldStart = null
+  rackHoldStart  = null
+  paused         = false
   setLandscape(false)
   recIndicator.classList.add('show')
   recIndicator.style.opacity = '1'
   recordBtn.classList.add('recording'); recordBtn.textContent = '■'
+  // Pause button available immediately during scan phase; hidden now
   pauseBtn.classList.remove('enabled')
+  pauseBtn.textContent = '⏸'
   updateSteps()
   showToast('info','📐','Step 1 — Full Rack',
     'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
 }
 
-// ── Record / Pause ────────────────────────────────────────────────────────────
+// ── Record button ─────────────────────────────────────────────────────────────
 recordBtn.onclick = ()=>{
   if(!recording){
-    chunks = []; recorder.start(500)
-    recording = true; phase = 'rack'
-    rackPhaseStart = Date.now()
-    rackHoldStart = null; rackGoodStreak = 0
-    setLandscape(false)
-    recIndicator.classList.add('show')
-    recordBtn.classList.add('recording'); recordBtn.textContent = '■'
-    pauseBtn.classList.remove('enabled')  // disabled until scan phase begins
-    updateSteps()
-    showToast('info','📐','Step 1 — Full Rack',
-      'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
+    beginRecording()
   } else {
-    recorder.stop(); recording = false; phase = 'idle'
+    // Manual stop — save whatever we have
+    if(recorder.state === 'paused') recorder.resume()
+    recorder.stop()
+    recording = false; phase = 'idle'
+    paused = false
     setLandscape(false)
     recIndicator.classList.remove('show')
     recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
@@ -530,33 +528,61 @@ recordBtn.onclick = ()=>{
     failedOverlay.classList.remove('show')
     zoneprogress.classList.remove('show')
     unitLabel.classList.remove('show')
-    showToast('info','ℹ️','Saved','Recording saved. Press record to start again.')
+    showToast('info','ℹ️','Saved','Recording saved. Press ● to start again.')
     updateSteps()
   }
 }
 
+// ── Pause button — available ANY TIME during scan phase ───────────────────────
 pauseBtn.onclick = ()=>{
   if(!recording || phase !== 'scan') return
   paused = !paused
   if(paused){
-    // Actually pause the MediaRecorder so no data is captured while paused
     if(recorder.state === 'recording') recorder.pause()
     recIndicator.style.opacity = '0.35'
-    pauseBtn.textContent = '▶'; clearBlock()
-    showToast('warn','⏸','Paused','Move to the next unit row, then press ▶.')
+    pauseBtn.textContent = '▶'
+    clearBlock()
+    showToast('warn','⏸','Paused','Move to the next unit row, then press ▶ to continue.')
   } else {
-    // Resume the MediaRecorder so recording continues
     if(recorder.state === 'paused') recorder.resume()
     recIndicator.style.opacity = '1'
     pauseBtn.textContent = '⏸'
-    pauseBtn.classList.remove('enabled')  // locked until all 5 zones done
+    // Reset scan state for the new unit row
     prevFrameData = null; motionBuf = []
     zonesSeen = new Set(); scanStart = Date.now()
-    stallSince = wrongDirSince = fastSince = null
+    wrongDirSince = null; wrongDirCount = 0
+    fastSince = null; stallSince = null
     updateZonePips()
     showToast('info','→','Scan Unit '+currentUnit,
       'Sweep camera slowly LEFT → RIGHT.')
   }
+}
+
+// ── "Record Again" on failed overlay ─────────────────────────────────────────
+recordAgainBtn.onclick = ()=>{
+  failedOverlay.classList.remove('show')
+  zoneprogress.classList.remove('show')
+  unitLabel.classList.remove('show')
+  clearBlock()
+  beginRecording()
+}
+
+// ── stopAndFail — kill recording and show error ───────────────────────────────
+function stopAndFail(msg){
+  if(recorder.state === 'paused') recorder.resume()
+  if(recorder.state !== 'inactive') recorder.stop()
+  chunks = []   // discard — onstop will skip download because chunks is empty
+  recording = false; phase = 'idle'; paused = false
+  recIndicator.classList.remove('show')
+  recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
+  pauseBtn.classList.remove('enabled')
+  clearBlock()
+  setLandscape(false)
+  zoneprogress.classList.remove('show')
+  unitLabel.classList.remove('show')
+  failMsg.textContent = msg
+  failedOverlay.classList.add('show')
+  updateSteps()
 }
 
 // ── Toast / Blocker ───────────────────────────────────────────────────────────
@@ -593,20 +619,26 @@ function updateZonePips(){
     document.getElementById('zp'+z).className = 'zp'+(zonesSeen.has(z)?' done':'')
 }
 
-// ── Frame analysis (offscreen — no flicker) ───────────────────────────────────
+// ── Frame analysis (offscreen canvas — no flicker) ────────────────────────────
 function grabOff(){
   offCtx.drawImage(video,0,0,offW,offH)
   return offCtx.getImageData(0,0,offW,offH)
 }
 
+// Strict rack frame check:
+//   • brightness in [25, 220]  — not too dark, not overexposed (too close)
+//   • edge density > 8%        — real structure visible, not a blank/blurry wall
+//   • pixel variance > 300     — not a flat/close-up surface (low-variance = too close)
 function analyzeRackFrame(){
   const d = grabOff().data
   let bright=0, edges=0, total=0
+  const lums = []
   for(let y=0;y<offH;y+=4){
     for(let x=0;x<offW;x+=4){
       const i=(y*offW+x)*4
       const lum = d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
       bright+=lum; total++
+      lums.push(lum)
       if(x+4<offW){
         const j=(y*offW+x+4)*4
         const lumR = d[j]*.299 + d[j+1]*.587 + d[j+2]*.114
@@ -615,9 +647,18 @@ function analyzeRackFrame(){
     }
   }
   const b = bright/total
-  return { ok: b>18 && b<240 && edges/total>0.05, brightness:b }
+  // Variance — detects if camera is too close (flat uniform surface)
+  const mean = b
+  const variance = lums.reduce((s,v)=>s+(v-mean)*(v-mean),0)/lums.length
+  const edgeDensity = edges/total
+  const tooClose  = variance < 300 || b > 215
+  const tooDark   = b < 25
+  const noDetail  = edgeDensity < 0.08
+  const ok = !tooClose && !tooDark && !noDetail
+  return { ok, brightness:b, tooClose, tooDark, noDetail }
 }
 
+// Pan detection — returns motion direction and speed from frame diff
 function detectPan(){
   const frame = grabOff()
   if(!prevFrameData){ prevFrameData=frame; return{motion:0,speed:0,tooFast:false,tooSlow:true,wrongDir:false} }
@@ -684,12 +725,15 @@ function updateShakeVig(){
 
 // ── Phase: Rack ───────────────────────────────────────────────────────────────
 function processRack(now){
+  // Grace period at start — don't analyse immediately
   if(now-rackPhaseStart<2000){
     showToast('info','📐','Step 1 — Full Rack',
       'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
     clearBlock(); return
   }
-  const {ok, brightness} = analyzeRackFrame()
+
+  const {ok, brightness, tooClose, tooDark, noDetail} = analyzeRackFrame()
+
   if(ok){
     if(!rackHoldStart) rackHoldStart = now
     const held = now - rackHoldStart
@@ -698,46 +742,33 @@ function processRack(now){
     clearBlock()
     if(held >= RACK_HOLD_MS) transitionToScan()
   } else {
-    // Frame lost — STOP recording entirely, show failed screen
     if(rackHoldStart !== null){
-      // Was mid-hold — user moved before 100%, stop and fail
-      stopAndFail('You moved the camera before capturing the full frame.\nPlease record again from the beginning.')
-    } else {
-      // Not yet started hold — just guide them
-      if(brightness < 18){
-        showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
-        showToast('err','🌑','Too Dark','Move to a brighter area.')
-      } else {
-        showBlock('📐','Show Full Rack',
-          'Step back until the ENTIRE rack fits in frame top to bottom.')
-        showToast('warn','📐','Step 1 — Full Rack',
-          'Move back — fit the whole rack in frame.')
-      }
+      // Frame went bad AFTER hold started — immediate fail
+      const reason = tooClose
+        ? 'You moved too close to the rack.\nStep back so the FULL rack fits in frame and record again.'
+        : 'You moved the camera before completing the capture.\nPlease record again from the beginning.'
+      stopAndFail(reason)
+      return
     }
+    // Hold not yet started — guide the user
     rackHoldStart = null
+    if(tooDark){
+      showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
+      showToast('err','🌑','Too Dark','Move to a brighter area.')
+    } else if(tooClose){
+      showBlock('🔍','Too Close!','Step BACK — the whole rack must fit in the frame.')
+      showToast('err','🔍','Too Close','Step back until the full rack is visible.')
+    } else {
+      showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits top-to-bottom in frame.')
+      showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')
+    }
   }
 }
 
-function stopAndFail(msg){
-  // Stop recording completely
-  if(recorder.state !== 'inactive') recorder.stop()
-  recording = false; phase = 'idle'
-  chunks = []  // discard bad recording
-  recIndicator.classList.remove('show')
-  recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
-  pauseBtn.classList.remove('enabled')
-  clearBlock()
-  setLandscape(false)
-  // Show failed overlay
-  failMsg.textContent = msg
-  failedOverlay.classList.add('show')
-}
-
-// ── Transition: hint 3s → auto rotate UI → scan ───────────────────────────────
+// ── Transition to scan phase ──────────────────────────────────────────────────
 function transitionToScan(){
   if(phase==='scan-prep') return
   phase='scan-prep'; clearBlock(); updateSteps()
-  // Show hint
   rotateHint.classList.add('show')
   let count=3; rhCd.textContent='Starting in 3…'
   const tick=setInterval(()=>{
@@ -747,18 +778,18 @@ function transitionToScan(){
       clearInterval(tick)
       rotateHint.classList.remove('show')
       recIndicator.style.opacity = '1'
-      // Auto-rotate UI — no user input needed
       setLandscape(true)
-      // Init scan phase
       phase='scan'; scanStart=Date.now()
       prevFrameData=null; motionBuf=[]
       zonesSeen=new Set(); currentUnit=1
-      stallSince=wrongDirSince=fastSince=null
+      wrongDirSince=null; wrongDirCount=0
+      fastSince=null; stallSince=null
       zoneprogress.classList.add('show')
       unitLabel.classList.add('show')
       unitNum.textContent='1'
+      // ── Pause button enabled immediately in scan phase ──
       pauseBtn.textContent='⏸'
-      pauseBtn.classList.remove('enabled')  // locked until all 5 zones earned
+      pauseBtn.classList.add('enabled')
       updateSteps(); updateZonePips()
       showToast('info','→','Scan Unit 1',
         'Hold phone sideways. Sweep camera LEFT → RIGHT.')
@@ -769,6 +800,8 @@ function transitionToScan(){
 // ── Phase: Scan ───────────────────────────────────────────────────────────────
 function processScan(now){
   if(paused) return
+
+  // Shake guard
   if(accelMag>32){
     shakeBlock=true
     showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
@@ -780,19 +813,38 @@ function processScan(now){
 
   const pan = detectPan()
 
-  // Wrong direction — reset ALL zones, must start over from left
+  // ── Wrong direction detection & enforcement ───────────────────────────────
   if(pan.wrongDir){
     if(!wrongDirSince) wrongDirSince=now
     if(now-wrongDirSince>400){
-      showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only. Zones reset — start from the left again.')
-      showToast('err','⬅️','Wrong Direction!','Zones reset. Start from the LEFT again.')
-      // Always reset all zones on reverse pan
-      zonesSeen=new Set(); updateZonePips()
-      scanStart=now  // restart zone timer too
-      prevFrameData=null; motionBuf=[]
-      return
+      wrongDirCount++
+      // First offence — warn and reset zones
+      if(wrongDirCount === 1){
+        showBlock('⬅️','Wrong Direction!',
+          'You must sweep LEFT → RIGHT only.\nZones reset — start from the left again.')
+        showToast('err','⬅️','Wrong Direction!',
+          'Pan LEFT → RIGHT only. Zones reset — start over from the left.')
+        zonesSeen=new Set(); updateZonePips()
+        scanStart=now
+        prevFrameData=null; motionBuf=[]
+        wrongDirSince=null   // reset timer so second offence is fresh
+        return
+      }
+      // Second offence — stop recording entirely
+      if(wrongDirCount >= 2){
+        stopAndFail(
+          'You swept in the wrong direction twice.\n' +
+          'The scan must go LEFT → RIGHT from start to finish.\n' +
+          'Please record again from the beginning.'
+        )
+        return
+      }
     }
-  } else { if(wrongDirSince) clearBlock(); wrongDirSince=null }
+    return
+  } else {
+    if(wrongDirSince) clearBlock()
+    wrongDirSince=null
+  }
 
   if(pan.tooFast){
     if(!fastSince) fastSince=now
@@ -818,11 +870,9 @@ function processScan(now){
 
   clearBlock()
 
-  // Zones only advance with REAL motion — not by time alone
-  // Camera must be actively moving right at a valid speed
+  // Advance zones only with valid rightward motion
   if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
     const elapsed = now - scanStart
-    // Each zone requires ~1.4s of continuous valid rightward motion
     const earnedZone = Math.min(N_ZONES-1, Math.floor(elapsed / 1400))
     if(!zonesSeen.has(earnedZone)){
       zonesSeen.add(earnedZone)
@@ -840,21 +890,20 @@ function processScan(now){
       'Almost there — reach the RIGHT end →',
     ]
     showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(N_ZONES-1, covered)])
-    // Keep pause button LOCKED until all zones are covered
-    pauseBtn.classList.remove('enabled')
     return
   }
 
-  // All 3 zones confirmed — unit complete
+  // All zones done — this unit is complete, auto-pause
   updateZonePips()
-  pauseBtn.classList.add('enabled')
-  paused=true
-  pauseBtn.textContent='▶'
+  paused = true
+  if(recorder.state === 'recording') recorder.pause()
+  recIndicator.style.opacity = '0.35'
+  pauseBtn.textContent = '▶'
   currentUnit++
-  unitNum.textContent=currentUnit
+  unitNum.textContent = currentUnit
   clearBlock()
   showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
-    'Move to next unit row, then press ▶.')
+    'Move to next unit row, then press ▶ to continue.')
 }
 
 // ── Canvas sync ───────────────────────────────────────────────────────────────
