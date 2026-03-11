@@ -617,31 +617,40 @@ function processRack(now){
   }
   const {ok, brightness} = analyzeRackFrame()
   if(ok){
+    // Rack is back in frame — resume recording if it was paused
+    if(recorder.state === 'paused'){
+      recorder.resume()
+      recIndicator.style.opacity = '1'
+    }
     // Start hold timer only when rack first detected
-    if(!rackHoldStart) rackHoldStart=now
+    if(!rackHoldStart) rackHoldStart = now
     const held = now - rackHoldStart
     const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
     showToast('ok','✅','Rack in Frame!', `Hold steady… ${pct}%`)
     clearBlock()
-    // Must reach 100% hold — no shortcuts
+    // Must reach 100% uninterrupted hold — no shortcuts
     if(held >= RACK_HOLD_MS) transitionToScan()
   } else {
-    // Frame lost mid-hold — hard reset to 0%, user must redo full hold
+    // Frame lost — PAUSE recording so bad frames are not saved
+    if(recorder.state === 'recording'){
+      recorder.pause()
+      recIndicator.style.opacity = '0.3'  // dim REC pill to show paused
+    }
+    // Hard reset hold — user must redo full hold from 0%
     if(rackHoldStart !== null){
-      showBlock('📐','Rack Lost!','You moved the camera. Show the FULL rack again and hold still.')
-      showToast('err','📐','Rack Lost — Restarting','Hold still — progress reset to 0%.')
+      // Was in progress — tell user explicitly
+      showBlock('📐','Show Full Rack Again','Recording paused. Fit the ENTIRE rack in frame and hold still to continue.')
+      showToast('err','📐','Rack Lost — Recording Paused','Show the full rack again to resume.')
     } else {
-      if(brightness<18){
+      if(brightness < 18){
         showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
         showToast('err','🌑','Too Dark','Move to a brighter area.')
       } else {
-        showBlock('📐','Show Full Rack',
-          'Step back until the ENTIRE rack fits in frame top to bottom.')
-        showToast('warn','📐','Step 1 — Full Rack',
-          'Move back — fit the whole rack in frame.')
+        showBlock('📐','Show Full Rack','Recording paused. Step back until the ENTIRE rack fits in frame top to bottom.')
+        showToast('warn','📐','Recording Paused','Move back — fit the whole rack in frame.')
       }
     }
-    rackHoldStart = null  // full reset — must start hold from 0% again
+    rackHoldStart = null  // full reset — must hold from 0% again
   }
 }
 
@@ -658,6 +667,9 @@ function transitionToScan(){
     else{
       clearInterval(tick)
       rotateHint.classList.remove('show')
+      // Ensure recorder is active going into scan (may have been paused during rack)
+      if(recorder.state === 'paused') recorder.resume()
+      recIndicator.style.opacity = '1'
       // Auto-rotate UI — no user input needed
       setLandscape(true)
       // Init scan phase
