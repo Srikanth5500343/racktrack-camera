@@ -549,8 +549,7 @@ pauseBtn.onclick = ()=>{
     recIndicator.style.opacity = '1'
     pauseBtn.textContent = '⏸'
     // Reset scan state for the new unit row
-    prevFrameData = null; motionBuf = []
-    zonesSeen = new Set(); horizAccum = 0; scanStart = Date.now()
+    zonesSeen = new Set(); horizAccum = 0
     wrongDirSince = null; wrongDirCount = 0
     
     fastSince = null; stallSince = null
@@ -715,85 +714,75 @@ function analyzeRackFrame(){
   return { ok, brightness:b, tooClose, tooDark, noFullCoverage }
 }
 
-// Pan detection — proper horizontal vs vertical optical flow using block matching.
-// Splits frame into a grid of blocks, finds best horizontal and vertical shift
-// for each block, and computes net X and Y motion independently.
-// This correctly distinguishes left/right panning from top/bottom tilting.
-const BLOCK = 16   // block size in px (on offscreen 160x120 canvas)
-const SEARCH = 6   // search range ±px
+// ── Gyroscope-based pan detection ────────────────────────────────────────────
+// Uses DeviceMotionEvent.rotationRate which gives deg/s on each axis.
+// When phone is held in landscape (rotated 90°):
+//   Alpha = rotation around Z (screen face) — not useful
+//   Beta  = rotation around X (tilt forward/back) — maps to UP/DOWN tilt
+//   Gamma = rotation around Y (tilt left/right)   — maps to LEFT/RIGHT pan
+//
+// We smooth with a small rolling buffer to avoid jitter noise.
 
-function detectPan(){
-  const frame = grabOff()
-  if(!prevFrameData){
-    prevFrameData = frame
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false }
-  }
+let gyroAvailable  = false
+let gyroBeta       = 0   // deg/s: positive = tilting up, negative = down
+let gyroGamma      = 0   // deg/s: positive = panning right, negative = left
+const GYRO_BUF     = 5
+const gyroBetaBuf  = []
+const gyroGammaBuf = []
 
-  const d1 = frame.data
-  const d2 = prevFrameData.data
-  prevFrameData = frame
+window.addEventListener('devicemotion', e => {
+  const r = e.rotationRate
+  if(!r || (r.beta === null && r.gamma === null)) return
+  gyroAvailable = true
 
-  function lum(d, x, y){
-    if(x<0||x>=offW||y<0||y>=offH) return 0
-    const i=(y*offW+x)*4
-    return d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
-  }
+  // Push into smoothing buffers
+  gyroBetaBuf.push(r.beta  || 0)
+  gyroGammaBuf.push(r.gamma || 0)
+  if(gyroBetaBuf.length  > GYRO_BUF) gyroBetaBuf.shift()
+  if(gyroGammaBuf.length > GYRO_BUF) gyroGammaBuf.shift()
 
-  let totalDx=0, totalDy=0, blockCount=0
-  const stepX = BLOCK*2, stepY = BLOCK*2
-  for(let by=BLOCK; by<offH-BLOCK; by+=stepY){
-    for(let bx=BLOCK; bx<offW-BLOCK; bx+=stepX){
-      let bestSAD=Infinity, bestDx=0, bestDy=0
-      for(let dy=-SEARCH; dy<=SEARCH; dy++){
-        for(let dx=-SEARCH; dx<=SEARCH; dx++){
-          let sad=0
-          for(let sy=0; sy<BLOCK; sy+=3){
-            for(let sx=0; sx<BLOCK; sx+=3){
-              sad += Math.abs(
-                lum(d1, bx+sx,    by+sy   ) -
-                lum(d2, bx+sx+dx, by+sy+dy)
-              )
-            }
-          }
-          if(sad < bestSAD){ bestSAD=sad; bestDx=dx; bestDy=dy }
-        }
-      }
-      if(bestSAD > 80){ totalDx+=bestDx; totalDy+=bestDy; blockCount++ }
-    }
-  }
+  gyroBeta  = gyroBetaBuf.reduce((a,b)=>a+b,0)  / gyroBetaBuf.length
+  gyroGamma = gyroGammaBuf.reduce((a,b)=>a+b,0) / gyroGammaBuf.length
 
-  if(blockCount === 0){
-    motionBuf.push(0)
-    if(motionBuf.length>MOTION_BUF) motionBuf.shift()
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false }
-  }
-
-  const avgDx = totalDx / blockCount
-  const avgDy = totalDy / blockCount
-
-  motionBuf.push(avgDx)
-  if(motionBuf.length>MOTION_BUF) motionBuf.shift()
-  const smoothX = motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
-
-  const absX = Math.abs(smoothX)
-  const absY = Math.abs(avgDy)
-
-  // Motion is valid horizontal if X dominates Y — ratio 1.2x to tolerate natural hand wobble
-  const isHorizontal = absX > 1.2 * absY && absX > 0.5
-
-  const wrongDir = smoothX > 2.5
-  // tooSlow = true for EVERYTHING that isn't clean left→right: stationary, vertical, diagonal
-  const tooSlow  = !isHorizontal
-  const tooFast  = isHorizontal && absX > 5.5
-
-  return { motionX:smoothX, motionY:avgDy, speed:absX, tooFast, tooSlow, wrongDir }
-}
-
-// ── Sensors ───────────────────────────────────────────────────────────────────
-window.addEventListener('devicemotion', e=>{
+  // Also track raw accel magnitude for shake detection
   const a = e.accelerationIncludingGravity
   if(a) accelMag = Math.abs(a.x)+Math.abs(a.y)+Math.abs(a.z)
 })
+
+// Returns pan state based purely on gyro rotation rates.
+// In landscape mode the phone is rotated 90° so axes swap:
+//   Panning left→right = gamma rotation  (absolute value = pan speed)
+//   Tilting up→down    = beta  rotation
+//
+// Thresholds (deg/s):
+//   MIN_PAN  = minimum gamma to count as intentional pan (not just holding steady)
+//   MAX_PAN  = too fast — blurry scan
+//   MAX_TILT = maximum allowed beta — if tilt exceeds this while panning, it's not horizontal
+
+const MIN_PAN  = 8    // deg/s minimum to register as panning
+const MAX_PAN  = 80   // deg/s too fast
+const MAX_TILT = 20   // deg/s — if beta exceeds this the motion is mostly vertical
+
+function getPanState(){
+  const panSpeed  = gyroGamma   // negative = panning right in landscape (camera moves right)
+  const tiltSpeed = gyroBeta
+
+  const absPan  = Math.abs(panSpeed)
+  const absTilt = Math.abs(tiltSpeed)
+
+  // Panning RIGHT: in landscape gamma is negative when panning right
+  // (depends on device orientation — we detect the sign during first valid pan)
+  const movingRight = panSpeed < -MIN_PAN
+  const movingLeft  = panSpeed > MIN_PAN
+
+  const tooFast      = absPan > MAX_PAN
+  const tooSlow      = absPan < MIN_PAN
+  const wrongDir     = movingLeft && absPan > MIN_PAN
+  // notHorizontal: significant tilt compared to pan, or pure tilt with no pan
+  const notHorizontal = absTilt > MAX_TILT && absTilt > absPan * 0.8
+
+  return { panSpeed, tiltSpeed, absPan, tooFast, tooSlow, wrongDir, notHorizontal }
+}
 
 // ── Canvas drawing ────────────────────────────────────────────────────────────
 function drawRackGuide(){
@@ -894,8 +883,7 @@ function transitionToScan(){
       rotateHint.classList.remove('show')
       recIndicator.style.opacity = '1'
       setLandscape(true)
-      phase='scan'; scanStart=Date.now()
-      prevFrameData=null; motionBuf=[]
+      phase='scan'
       zonesSeen=new Set(); horizAccum=0; currentUnit=1
       wrongDirSince=null; wrongDirCount=0
       fastSince=null; stallSince=null
@@ -916,100 +904,109 @@ function transitionToScan(){
 function processScan(now){
   if(paused) return
 
+  // If gyro not available, show one-time warning
+  if(!gyroAvailable){
+    showToast('warn','📡','Sensor Unavailable',
+      'Motion sensor not detected. Sweep left → right manually.')
+  }
+
   // Shake guard
-  if(accelMag>32){
-    shakeBlock=true
+  if(accelMag > 32){
+    shakeBlock = true
     showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
     showToast('err','🤚','Shaking!','Hold camera steady.')
     return
   }
-  if(shakeBlock && accelMag<20){ shakeBlock=false; clearBlock() }
+  if(shakeBlock && accelMag < 20){ shakeBlock = false; clearBlock() }
   if(shakeBlock) return
 
-  const pan = detectPan()
+  const pan = getPanState()
 
-  // ── Wrong direction (panning LEFT instead of RIGHT) ───────────────────────
+  // ── Not horizontal (top-to-bottom / diagonal tilt) ────────────────────────
+  if(pan.notHorizontal){
+    stallSince = null; fastSince = null; wrongDirSince = null
+    if(!stallSince) {}  // clear any stall
+    showBlock('↕️','Wrong Direction!',
+      'You are moving UP or DOWN.\nSweep the camera LEFT → RIGHT only.')
+    showToast('err','↕️','Not Left → Right!',
+      'Pan the camera sideways LEFT → RIGHT — not up or down.')
+    zonesSeen = new Set(); horizAccum = 0; updateZonePips()
+    return
+  }
+
+  // ── Wrong direction: panning left ─────────────────────────────────────────
   if(pan.wrongDir){
     stallSince = null; fastSince = null
-    if(!wrongDirSince) wrongDirSince=now
-    if(now-wrongDirSince>400){
+    if(!wrongDirSince) wrongDirSince = now
+    if(now - wrongDirSince > 400){
       wrongDirCount++
       if(wrongDirCount === 1){
         showBlock('⬅️','Wrong Direction!',
-          'You must sweep LEFT → RIGHT only.\nZones reset — start from the left again.')
+          'Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
         showToast('err','⬅️','Wrong Direction!',
-          'Pan LEFT → RIGHT only. Zones reset — start over from the left.')
-        zonesSeen=new Set(); horizAccum=0; updateZonePips()
-        scanStart=now
-        prevFrameData=null; motionBuf=[]
-        wrongDirSince=null
+          'Sweep LEFT → RIGHT only. Zones reset.')
+        zonesSeen = new Set(); horizAccum = 0; updateZonePips()
+        wrongDirSince = null
         return
       }
       if(wrongDirCount >= 2){
         stopAndFail(
-          'You swept in the wrong direction twice.\n' +
-          'The scan must go LEFT → RIGHT from start to finish.\n' +
+          'You swept the wrong direction twice.\n' +
+          'Scan must go LEFT → RIGHT.\n' +
           'Please record again from the beginning.'
         )
         return
       }
     }
-    showToast('err','⬅️','Wrong Way!','Pan LEFT → RIGHT only.')
     return
   } else {
     if(wrongDirSince) clearBlock()
-    wrongDirSince=null
+    wrongDirSince = null
   }
 
+  // ── Too fast ──────────────────────────────────────────────────────────────
   if(pan.tooFast){
-    if(!fastSince) fastSince=now
-    if(now-fastSince>400){
-      showBlock('🐇','Too Fast!','Slow down — move the camera slowly for a clear scan.')
+    if(!fastSince) fastSince = now
+    if(now - fastSince > 400){
+      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
       showToast('err','🐇','Too Fast','Slow down your pan speed.')
-      return
     }
-  } else { if(fastSince) clearBlock(); fastSince=null }
-
-  if(pan.tooSlow){
-    if(!stallSince) stallSince=now
-    if(now-stallSince>5000){
-      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
-      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally left to right.')
-      return
-    }
-  } else { if(stallSince) clearBlock(); stallSince=null }
-
-  clearBlock()
-
-  // Advance zones only by accumulating REAL rightward horizontal distance.
-  // Each zone requires the camera to have swept ~ZONE_DIST units of horizontal motion.
-  // Vertical / diagonal motion contributes ZERO — it cannot fill zones.
-  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
-    horizAccum += pan.speed   // only reaches here when isHorizontal is true
-    const ZONE_DIST = 28      // tune: total sweep distance split across N_ZONES
-    const earnedZone = Math.min(N_ZONES-1, Math.floor(horizAccum / ZONE_DIST))
-    if(!zonesSeen.has(earnedZone)){
-      zonesSeen.add(earnedZone)
-      updateZonePips()
-    }
-  }
-
-  const covered = zonesSeen.size
-  const allDone = covered >= N_ZONES
-
-  if(!allDone){
-    // Zones fill silently — no toast during correct sweeping
     return
+  } else { if(fastSince) clearBlock(); fastSince = null }
+
+  // ── Not moving / too slow ─────────────────────────────────────────────────
+  if(pan.tooSlow){
+    if(!stallSince) stallSince = now
+    if(now - stallSince > 4000){
+      showBlock('→','Sweep Left to Right',
+        'Move the camera slowly from LEFT to RIGHT across the rack.')
+      showToast('warn','→','Sweep Left → Right',
+        'Pan the camera horizontally LEFT → RIGHT.')
+      return
+    }
+    // silent for first 4s — don't interrupt if user just paused briefly
+    return
+  } else { if(stallSince) clearBlock(); stallSince = null }
+
+  // ── Valid left→right pan — accumulate distance and advance zones ──────────
+  clearBlock()
+  horizAccum += pan.absPan
+  const ZONE_DIST = 120   // deg/s accumulated to fill all 3 zones (tuned for real sweep)
+  const earnedZone = Math.min(N_ZONES - 1, Math.floor(horizAccum / (ZONE_DIST / N_ZONES)))
+  if(!zonesSeen.has(earnedZone)){
+    zonesSeen.add(earnedZone)
+    updateZonePips()
   }
 
-  // All zones done — unit complete, keep recording continuously, reset for next unit
+  const covered  = zonesSeen.size
+  const allDone  = covered >= N_ZONES
+  if(!allDone) return   // silent during correct sweep
+
+  // All zones done — unit complete
   currentUnit++
   unitNum.textContent = currentUnit
   zonesSeen = new Set(); horizAccum = 0; updateZonePips()
-  scanStart = Date.now()
-  prevFrameData = null; motionBuf = []
   wrongDirSince = null; wrongDirCount = 0
-  
   fastSince = null; stallSince = null
   clearBlock()
   showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
