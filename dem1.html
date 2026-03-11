@@ -1,879 +1,1030 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>RackTrack Capture</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&display=swap');
 
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;}
 
 body{
   background:#000;
   color:#fff;
   font-family:'Barlow Condensed',sans-serif;
   overflow:hidden;
-  height:100vh;
+  height:100dvh;
   width:100vw;
+  touch-action:none;
 }
 
 video{
   position:fixed;
-  width:100%;height:100%;
+  inset:0;
+  width:100%;
+  height:100%;
   object-fit:cover;
   z-index:0;
 }
 
 canvas{
   position:fixed;
-  width:100%;height:100%;
+  inset:0;
+  width:100%;
+  height:100%;
   pointer-events:none;
   z-index:1;
 }
 
-/* BLOCKER OVERLAY - shown when violation detected */
-#blocker{
-  position:fixed;
-  inset:0;
-  z-index:10;
-  display:none;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  background:rgba(0,0,0,0.82);
-  backdrop-filter:blur(4px);
-  animation:fadeIn 0.2s ease;
-}
-
-#blocker.show{display:flex;}
-
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-
-.blocker-icon{
-  font-size:64px;
-  margin-bottom:16px;
-  animation:pulse 1s infinite;
-}
-
-@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-
-.blocker-title{
-  font-family:'Barlow Condensed',sans-serif;
-  font-size:28px;
-  font-weight:700;
-  letter-spacing:2px;
-  text-transform:uppercase;
-  color:#ff3b3b;
-  margin-bottom:10px;
-}
-
-.blocker-msg{
-  font-family:'Share Tech Mono',monospace;
-  font-size:15px;
-  color:#ffcc00;
-  text-align:center;
-  padding:0 30px;
-  line-height:1.7;
-  max-width:360px;
-}
-
-/* HEADER */
+/* ── HEADER ─────────────────────────────────── */
 .header{
   position:fixed;
-  top:0;width:100%;
+  top:0;left:0;right:0;
+  z-index:10;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:12px 18px;
-  background:linear-gradient(180deg,rgba(0,0,0,0.9),transparent);
-  z-index:5;
+  padding:14px 18px 20px;
+  background:linear-gradient(180deg,rgba(0,0,0,0.85) 0%,transparent 100%);
 }
 
 .logo{
   font-family:'Barlow Condensed',sans-serif;
-  font-size:22px;
-  font-weight:700;
-  letter-spacing:3px;
+  font-weight:800;
+  font-size:20px;
+  letter-spacing:4px;
   text-transform:uppercase;
-  color:#00e5ff;
+  color:#fff;
 }
 
-.phase-badge{
-  font-family:'Share Tech Mono',monospace;
-  font-size:12px;
-  padding:4px 10px;
-  border-radius:2px;
-  border:1px solid;
-  text-transform:uppercase;
-  letter-spacing:1px;
-}
+.logo span{color:#00e5ff;}
 
-.phase-idle{color:#888;border-color:#333}
-.phase-rack{color:#ffcc00;border-color:#ffcc00}
-.phase-rotate{color:#ff8800;border-color:#ff8800}
-.phase-scan{color:#00e5ff;border-color:#00e5ff}
-.phase-done{color:#00ff88;border-color:#00ff88}
-
-/* STEP TRACKER */
-.steps{
-  position:fixed;
-  top:60px;
-  left:50%;
-  transform:translateX(-50%);
-  display:flex;
-  gap:8px;
-  z-index:5;
-}
-
-.step{
-  display:flex;
+.rec-indicator{
+  display:none;
   align-items:center;
   gap:6px;
   font-family:'Share Tech Mono',monospace;
-  font-size:11px;
-  padding:5px 10px;
-  border-radius:2px;
-  border:1px solid #333;
-  color:#555;
-  background:rgba(0,0,0,0.6);
-  transition:all 0.3s;
-  white-space:nowrap;
+  font-size:12px;
+  letter-spacing:1px;
+  color:#ff3b3b;
 }
 
-.step.active{color:#ffcc00;border-color:#ffcc00;background:rgba(255,204,0,0.08)}
-.step.done{color:#00ff88;border-color:#00ff88;background:rgba(0,255,136,0.08)}
-.step-num{font-weight:700;font-size:13px;}
+.rec-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  background:#ff3b3b;
+  animation:blink 1s infinite;
+}
 
-/* GUIDANCE BANNER */
-#guidance{
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+.rec-indicator.show{display:flex;}
+
+/* ── STEP PILLS ──────────────────────────────── */
+.steps{
+  position:fixed;
+  top:58px;left:0;right:0;
+  z-index:10;
+  display:flex;
+  justify-content:center;
+  gap:6px;
+  padding:0 16px;
+}
+
+.step{
+  flex:1;
+  max-width:110px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:9px;
+  letter-spacing:0.5px;
+  text-transform:uppercase;
+  color:#444;
+  transition:all 0.4s;
+}
+
+.step-bar{
+  width:100%;
+  height:3px;
+  background:#222;
+  border-radius:2px;
+  transition:all 0.4s;
+}
+
+.step.active .step-bar{background:#ffcc00;}
+.step.active{color:#ffcc00;}
+.step.done .step-bar{background:#00ff88;}
+.step.done{color:#00ff88;}
+
+/* ── TOAST BANNER (guidance) ─────────────────── */
+#toast{
   position:fixed;
   bottom:130px;
   left:50%;
   transform:translateX(-50%);
-  z-index:5;
-  text-align:center;
-  width:90%;
-  max-width:420px;
+  z-index:10;
+  width:88%;
+  max-width:400px;
+  pointer-events:none;
+  transition:opacity 0.25s;
 }
 
-.guide-box{
-  background:rgba(0,0,0,0.75);
-  border-radius:4px;
-  padding:12px 18px;
+.toast-inner{
+  background:rgba(0,0,0,0.78);
+  backdrop-filter:blur(6px);
+  border-radius:8px;
+  padding:11px 15px;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
   border-left:3px solid #ffcc00;
-  font-family:'Share Tech Mono',monospace;
-  font-size:14px;
-  line-height:1.6;
-  color:#fff;
-  text-align:left;
 }
 
-.guide-box.success{border-left-color:#00ff88;color:#00ff88;}
-.guide-box.warning{border-left-color:#ff8800;color:#ffcc00;}
-.guide-box.error{border-left-color:#ff3b3b;color:#ff6b6b;}
-.guide-box.info{border-left-color:#00e5ff;color:#cceeff;}
+.toast-inner.ok{border-left-color:#00ff88;}
+.toast-inner.err{border-left-color:#ff3b3b;}
+.toast-inner.info{border-left-color:#00e5ff;}
 
-.guide-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;opacity:0.7;}
+.toast-icon{font-size:18px;line-height:1;flex-shrink:0;margin-top:1px;}
 
-/* ZONE BAR */
-#zonebar{
+.toast-text{flex:1;}
+
+.toast-label{
+  font-family:'Share Tech Mono',monospace;
+  font-size:9px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  opacity:0.6;
+  margin-bottom:2px;
+}
+
+.toast-msg{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;
+  font-size:16px;
+  line-height:1.3;
+  color:#fff;
+}
+
+/* ── BLOCKER OVERLAY ──────────────────────────── */
+#blocker{
   position:fixed;
-  top:100px;
+  inset:0;
+  z-index:20;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  background:rgba(0,0,0,0.75);
+  backdrop-filter:blur(8px);
+}
+
+#blocker.show{display:flex;}
+
+.blocker-icon{
+  font-size:56px;
+  animation:iconpulse 1.2s ease-in-out infinite;
+}
+
+@keyframes iconpulse{
+  0%,100%{transform:scale(1);}
+  50%{transform:scale(1.15);}
+}
+
+.blocker-title{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800;
+  font-size:26px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:#ff4444;
+  text-align:center;
+}
+
+.blocker-sub{
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;
+  color:#ffcc00;
+  text-align:center;
+  line-height:1.7;
+  max-width:300px;
+  padding:0 20px;
+}
+
+/* ── ROTATE HINT OVERLAY (2-3 sec) ───────────── */
+#rotateHint{
+  position:fixed;
+  inset:0;
+  z-index:18;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(4px);
+}
+
+#rotateHint.show{display:flex;}
+
+.rotate-anim{
+  font-size:64px;
+  animation:rotateHint 1.8s ease-in-out infinite;
+}
+
+@keyframes rotateHint{
+  0%{transform:rotate(0deg);}
+  40%{transform:rotate(90deg);}
+  60%{transform:rotate(90deg);}
+  100%{transform:rotate(0deg);}
+}
+
+.rotate-msg{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;
+  font-size:22px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:#ffcc00;
+  text-align:center;
+}
+
+.rotate-sub{
+  font-family:'Share Tech Mono',monospace;
+  font-size:12px;
+  color:#aaa;
+  text-align:center;
+}
+
+/* ── ZONE PROGRESS BAR ────────────────────────── */
+#zoneprogress{
+  position:fixed;
+  bottom:115px;
   left:50%;
   transform:translateX(-50%);
   display:none;
-  gap:4px;
-  z-index:5;
+  gap:5px;
+  z-index:10;
 }
 
-#zonebar.show{display:flex;}
+#zoneprogress.show{display:flex;}
 
-.zone{
-  width:44px;height:20px;
+.zp{
+  width:36px;height:5px;
+  border-radius:3px;
   background:#222;
-  border:1px solid #333;
-  border-radius:2px;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Share Tech Mono',monospace;
-  font-size:10px;
-  color:#555;
   transition:all 0.3s;
 }
 
-.zone.active{background:#003344;border-color:#00e5ff;color:#00e5ff;}
-.zone.done{background:#003322;border-color:#00ff88;color:#00ff88;}
+.zp.active{background:#00e5ff;}
+.zp.done{background:#00ff88;}
 
-/* CONTROLS */
+/* ── CONTROLS ─────────────────────────────────── */
 .controls{
   position:fixed;
   bottom:24px;
-  width:100%;
+  left:0;right:0;
   display:flex;
   justify-content:center;
   align-items:center;
-  gap:32px;
-  z-index:5;
+  gap:28px;
+  z-index:10;
 }
 
 .btn{
   border:none;
   border-radius:50%;
-  width:54px;height:54px;
-  font-size:20px;
   cursor:pointer;
-  transition:all 0.2s;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Barlow Condensed',sans-serif;
+  font-size:20px;
+  transition:transform 0.15s, opacity 0.2s;
+  -webkit-tap-highlight-color:transparent;
 }
 
-.btn:active{transform:scale(0.9);}
+.btn:active{transform:scale(0.88);}
 
-.btn-flip{background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);}
-.btn-pause{background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);}
-.btn-pause:disabled{opacity:0.3;cursor:default;}
+.btn-flip{
+  width:52px;height:52px;
+  background:rgba(255,255,255,0.1);
+  border:1.5px solid rgba(255,255,255,0.18);
+  color:#fff;
+}
+
+.btn-pause{
+  width:52px;height:52px;
+  background:rgba(255,255,255,0.1);
+  border:1.5px solid rgba(255,255,255,0.18);
+  color:#fff;
+  opacity:0.35;
+  pointer-events:none;
+}
+
+.btn-pause.enabled{opacity:1;pointer-events:auto;}
 
 .btn-record{
-  width:76px;height:76px;
-  font-size:28px;
-  background:linear-gradient(135deg,#cc0000,#ff2222);
+  width:74px;height:74px;
+  font-size:26px;
+  background:radial-gradient(circle at 40% 35%, #ff5555, #cc0000);
+  box-shadow:0 0 0 4px rgba(255,60,60,0.25), 0 4px 20px rgba(255,0,0,0.4);
   color:#fff;
-  box-shadow:0 0 0 3px rgba(255,60,60,0.3);
-}
-.btn-record.recording{
-  background:linear-gradient(135deg,#222,#333);
-  box-shadow:0 0 0 3px rgba(255,255,255,0.15);
 }
 
-/* ORIENTATION LOCK OVERLAY */
-#orientLock{
-  position:fixed;inset:0;
-  z-index:20;
-  background:#000;
+.btn-record.recording{
+  background:radial-gradient(circle at 40% 35%,#444,#222);
+  box-shadow:0 0 0 4px rgba(255,255,255,0.1);
+  font-size:20px;
+}
+
+.btn-record.recording::before{
+  content:'';
+  position:absolute;
+  width:74px;height:74px;
+  border-radius:50%;
+  border:2px solid rgba(255,255,255,0.2);
+  animation:recordring 1.5s ease-out infinite;
+}
+
+@keyframes recordring{
+  0%{transform:scale(1);opacity:0.6;}
+  100%{transform:scale(1.5);opacity:0;}
+}
+
+/* ── SCAN PROGRESS LABEL ──────────────────────── */
+#unitLabel{
+  position:fixed;
+  top:108px;
+  right:16px;
+  z-index:10;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  color:#666;
   display:none;
   flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:20px;
+  align-items:flex-end;
+  gap:2px;
 }
 
-#orientLock.show{display:flex;}
+#unitLabel.show{display:flex;}
 
-.orient-icon{font-size:72px;animation:rotate90 1.5s infinite ease-in-out;}
-@keyframes rotate90{0%{transform:rotate(0deg)}40%{transform:rotate(90deg)}100%{transform:rotate(90deg)}}
-
-.orient-msg{
+#unitNum{
   font-family:'Barlow Condensed',sans-serif;
-  font-size:24px;font-weight:700;
-  letter-spacing:2px;text-transform:uppercase;
-  color:#ffcc00;
+  font-weight:700;
+  font-size:28px;
+  color:#00e5ff;
+  line-height:1;
 }
+
 </style>
 </head>
 <body>
 
-<!-- Orientation Lock -->
-<div id="orientLock">
-  <div class="orient-icon">📱</div>
-  <div class="orient-msg" id="orientMsg">Rotate phone vertically</div>
+<!-- Rotate hint (2-3 second show only, no lock) -->
+<div id="rotateHint">
+  <div class="rotate-anim">📱</div>
+  <div class="rotate-msg">Rotate phone horizontal</div>
+  <div class="rotate-sub">for the scan step — then rotate back</div>
 </div>
 
-<!-- Blocker overlay for violations -->
+<!-- Hard blocker for violations -->
 <div id="blocker">
   <div class="blocker-icon" id="blockerIcon">⚠️</div>
   <div class="blocker-title" id="blockerTitle">Hold On</div>
-  <div class="blocker-msg" id="blockerMsg">Follow the instructions to continue.</div>
+  <div class="blocker-sub" id="blockerSub">Follow instructions to continue.</div>
 </div>
 
+<!-- Header -->
 <div class="header">
-  <div class="logo">RackTrack</div>
-  <div class="phase-badge phase-idle" id="phaseBadge">IDLE</div>
-</div>
-
-<!-- Step tracker -->
-<div class="steps">
-  <div class="step" id="step1"><span class="step-num">1</span> Full Rack Shot</div>
-  <div class="step" id="step2"><span class="step-num">2</span> Rotate ↔</div>
-  <div class="step" id="step3"><span class="step-num">3</span> Sweep L→R</div>
-</div>
-
-<!-- Zone bar for sweep phase -->
-<div id="zonebar">
-  <div class="zone" id="z0">L</div>
-  <div class="zone" id="z1">2</div>
-  <div class="zone" id="z2">3</div>
-  <div class="zone" id="z3">4</div>
-  <div class="zone" id="z4">R</div>
-</div>
-
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
-
-<div id="guidance">
-  <div class="guide-box info" id="guideBox">
-    <div class="guide-title">Instructions</div>
-    <span id="guideText">Press record to start capturing</span>
+  <div class="logo">Rack<span>Track</span></div>
+  <div class="rec-indicator" id="recIndicator">
+    <div class="rec-dot"></div>
+    <span>REC</span>
   </div>
 </div>
 
+<!-- Step indicator -->
+<div class="steps">
+  <div class="step" id="step1">
+    <div class="step-bar"></div>
+    <span>Full Rack</span>
+  </div>
+  <div class="step" id="step2">
+    <div class="step-bar"></div>
+    <span>Unit Scan</span>
+  </div>
+  <div class="step" id="step3">
+    <div class="step-bar"></div>
+    <span>Complete</span>
+  </div>
+</div>
+
+<!-- Unit counter (scan phase) -->
+<div id="unitLabel">
+  UNIT
+  <div id="unitNum">1</div>
+</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<!-- Guidance toast -->
+<div id="toast">
+  <div class="toast-inner info" id="toastInner">
+    <div class="toast-icon" id="toastIcon">ℹ️</div>
+    <div class="toast-text">
+      <div class="toast-label" id="toastLabel">Instructions</div>
+      <div class="toast-msg" id="toastMsg">Press record to begin</div>
+    </div>
+  </div>
+</div>
+
+<!-- Zone progress (scan) -->
+<div id="zoneprogress">
+  <div class="zp" id="zp0"></div>
+  <div class="zp" id="zp1"></div>
+  <div class="zp" id="zp2"></div>
+  <div class="zp" id="zp3"></div>
+  <div class="zp" id="zp4"></div>
+</div>
+
+<!-- Controls -->
 <div class="controls">
-  <button class="btn btn-flip" id="flip">🔄</button>
-  <button class="btn btn-record" id="record">●</button>
-  <button class="btn btn-pause" id="pause" disabled>⏸</button>
+  <button class="btn btn-flip" id="flipBtn">🔄</button>
+  <button class="btn btn-record" id="recordBtn">●</button>
+  <button class="btn btn-pause" id="pauseBtn">⏸</button>
 </div>
 
 <script>
-// ─── Elements ────────────────────────────────────────────────────────────────
-const video      = document.getElementById("video")
-const canvas     = document.getElementById("canvas")
-const ctx        = canvas.getContext("2d")
-const guideBox   = document.getElementById("guideBox")
-const guideText  = document.getElementById("guideText")
-const phaseBadge = document.getElementById("phaseBadge")
-const blocker    = document.getElementById("blocker")
-const blockerIcon= document.getElementById("blockerIcon")
-const blockerTitle= document.getElementById("blockerTitle")
-const blockerMsg = document.getElementById("blockerMsg")
-const orientLock = document.getElementById("orientLock")
-const orientMsg  = document.getElementById("orientMsg")
-const recordBtn  = document.getElementById("record")
-const pauseBtn   = document.getElementById("pause")
-const flipBtn    = document.getElementById("flip")
-const zonebar    = document.getElementById("zonebar")
+// ════════════════════════════════════════════════
+//  ELEMENTS
+// ════════════════════════════════════════════════
+const video       = document.getElementById('video')
+const canvas      = document.getElementById('canvas')
+const ctx         = canvas.getContext('2d', {willReadFrequently:true})
+const recIndicator= document.getElementById('recIndicator')
+const toastInner  = document.getElementById('toastInner')
+const toastIcon   = document.getElementById('toastIcon')
+const toastLabel  = document.getElementById('toastLabel')
+const toastMsg    = document.getElementById('toastMsg')
+const blocker     = document.getElementById('blocker')
+const blockerIcon = document.getElementById('blockerIcon')
+const blockerTitle= document.getElementById('blockerTitle')
+const blockerSub  = document.getElementById('blockerSub')
+const rotateHint  = document.getElementById('rotateHint')
+const zoneprogress= document.getElementById('zoneprogress')
+const unitLabel   = document.getElementById('unitLabel')
+const unitNum     = document.getElementById('unitNum')
+const recordBtn   = document.getElementById('recordBtn')
+const pauseBtn    = document.getElementById('pauseBtn')
+const flipBtn     = document.getElementById('flipBtn')
 
-// ─── State ────────────────────────────────────────────────────────────────────
-let usingFront  = false
-let stream, recorder
-let chunks      = []
-let recording   = false
-let paused      = false
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+let usingFront    = false
+let stream, recorder, chunks = []
+let recording     = false
+let paused        = false
 
-let phase       = "idle"   // idle | rack | rotate | scan | done
-let rackTimer   = null
-let rackHoldMs  = 0
-let rackConfirmed = false
+// phases: idle | rack | scan | done
+let phase         = 'idle'
 
-let rotateTimer = null
-let scanStart   = null
+// Rack phase
+let rackPhaseStart= 0
+let rackHoldStart = null
+let rackGoodStreak= 0
+const RACK_HOLD_MS= 2500   // hold 2.5s with good frame
+
+// Scan phase
+let scanStart     = 0
 let prevFrameData = null
-let lastPanWarning = 0
+let motionBuf     = []     // ring buffer of motion values
+const MOTION_BUF  = 6
+let zonesSeen     = new Set()
+let currentUnit   = 1
+let stallSince    = null
+let wrongDirSince = null
+let fastSince     = null
 
-let shakeLevel  = 0
-let violationActive = false
+// Shake
+let accelMag      = 0
+let shakeBlock    = false
 
-// Zone tracking for sweep (5 zones)
-const N_ZONES   = 5
-let zonesSeen   = new Set()
-let zoneHistory = []
+// Offscreen canvas for frame analysis (smaller = faster, no flicker)
+const offW = 160, offH = 120
+const offCanvas = document.createElement('canvas')
+offCanvas.width = offW; offCanvas.height = offH
+const offCtx = offCanvas.getContext('2d', {willReadFrequently:true})
 
-// Motion smoothing
-let motionHistory = []
-
-// ─── Camera ───────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════════════════
 async function startCamera(){
   if(stream) stream.getTracks().forEach(t=>t.stop())
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode: usingFront?"user":"environment", width:{ideal:1920}, height:{ideal:1080}},
-    audio:false
-  })
-  video.srcObject = stream
-  recorder = new MediaRecorder(stream)
-  recorder.ondataavailable = e=>chunks.push(e.data)
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode: usingFront?'user':'environment'},
+      audio:false
+    })
+    video.srcObject = stream
+    setupRecorder()
+  }catch(e){ showToast('err','⚠️','Camera Error','Could not access camera: '+e.message) }
+}
+
+function setupRecorder(){
+  try{ recorder = new MediaRecorder(stream, {mimeType:'video/webm;codecs=vp8'}) }
+  catch(e){ recorder = new MediaRecorder(stream) }
+  recorder.ondataavailable = e=>{ if(e.data.size>0) chunks.push(e.data) }
   recorder.onstop = ()=>{
-    const blob = new Blob(chunks,{type:"video/webm"})
+    const blob = new Blob(chunks,{type:'video/webm'})
     const url  = URL.createObjectURL(blob)
-    const a    = document.createElement("a")
-    a.href=url; a.download="racktrack.webm"; a.click()
+    const a    = document.createElement('a')
+    a.href=url; a.download='racktrack_capture.webm'; a.click()
   }
 }
 
 startCamera()
 
-// ─── Controls ─────────────────────────────────────────────────────────────────
 flipBtn.onclick = ()=>{ usingFront=!usingFront; startCamera() }
 
+// ════════════════════════════════════════════════
+//  RECORD / PAUSE
+// ════════════════════════════════════════════════
 recordBtn.onclick = ()=>{
   if(!recording){
     chunks=[]
-    recorder.start()
+    recorder.start(500)   // get data every 500ms chunks
     recording=true
-    phase="rack"
-    rackTimer=Date.now()
-    rackHoldMs=0
-    rackConfirmed=false
-    zonesSeen=new Set()
-    zoneHistory=[]
-    recordBtn.classList.add("recording")
-    recordBtn.textContent="■"
-    pauseBtn.disabled=false
+    phase='rack'
+    rackPhaseStart=Date.now()
+    rackHoldStart=null
+    rackGoodStreak=0
+    recIndicator.classList.add('show')
+    recordBtn.classList.add('recording')
+    recordBtn.textContent='■'
+    pauseBtn.classList.add('enabled')
     updateSteps()
-    setPhase("rack")
-    showGuide("warning","Step 1: Full Rack","Hold phone VERTICALLY and capture the ENTIRE rack from top to bottom in frame.")
+    showToast('warn','📐','Step 1 — Full Rack','Step back until the ENTIRE rack fits in frame top to bottom.')
   } else {
-    stopRecording()
+    recorder.stop()
+    recording=false
+    phase='idle'
+    recIndicator.classList.remove('show')
+    recordBtn.classList.remove('recording')
+    recordBtn.textContent='●'
+    pauseBtn.classList.remove('enabled')
+    clearBlock()
+    zoneprogress.classList.remove('show')
+    unitLabel.classList.remove('show')
+    showToast('info','ℹ️','Saved','Recording saved. Press record to start again.')
+    updateSteps()
   }
 }
 
 pauseBtn.onclick = ()=>{
-  if(!recording) return
-  paused = !paused
+  if(!recording || phase!=='scan') return
+  paused=!paused
   if(paused){
-    pauseBtn.textContent="▶"
-    showGuide("warning","Paused","Move to next unit, then press ▶ to resume scanning.")
+    pauseBtn.textContent='▶'
+    clearBlock()
+    showToast('warn','⏸','Paused','Move to next unit row, then press ▶ to continue.')
   } else {
-    pauseBtn.textContent="⏸"
+    pauseBtn.textContent='⏸'
     prevFrameData=null
+    motionBuf=[]
+    zonesSeen=new Set()
     scanStart=Date.now()
-    showGuide("info","Scan Unit","Sweep camera slowly LEFT → RIGHT across the full unit.")
+    stallSince=null
+    wrongDirSince=null
+    fastSince=null
+    updateZonePips()
+    showToast('info','→','Scan Unit '+currentUnit,'Pan slowly LEFT → RIGHT across the unit.')
   }
 }
 
-function stopRecording(){
-  recorder.stop()
-  recording=false
-  phase="idle"
-  recordBtn.classList.remove("recording")
-  recordBtn.textContent="●"
-  pauseBtn.disabled=true
-  clearViolation()
-  setPhase("idle")
-  zonebar.classList.remove("show")
-  showGuide("info","Instructions","Press record to start capturing.")
+// ════════════════════════════════════════════════
+//  TOAST / BLOCKER UI
+// ════════════════════════════════════════════════
+function showToast(type, icon, label, msg){
+  toastInner.className='toast-inner '+(type==='ok'?'ok':type==='err'?'err':'info')
+  toastIcon.textContent=icon
+  toastLabel.textContent=label
+  toastMsg.textContent=msg
 }
 
-// ─── Orientation helpers ───────────────────────────────────────────────────────
-function isPortrait(){ return window.innerHeight > window.innerWidth }
-function isLandscape(){ return window.innerWidth > window.innerHeight }
-
-// ─── Guide UI helpers ─────────────────────────────────────────────────────────
-function showGuide(type, title, msg){
-  guideBox.className = `guide-box ${type}`
-  guideBox.querySelector(".guide-title").textContent = title
-  guideText.textContent = msg
-}
-
-function showViolation(icon, title, msg){
-  if(violationActive && blockerTitle.textContent===title) return
-  violationActive=true
+let _blockerActive=false
+function showBlock(icon, title, sub){
+  if(_blockerActive && blockerTitle.textContent===title) return
+  _blockerActive=true
   blockerIcon.textContent=icon
   blockerTitle.textContent=title
-  blockerMsg.textContent=msg
-  blocker.classList.add("show")
+  blockerSub.textContent=sub
+  blocker.classList.add('show')
 }
 
-function clearViolation(){
-  violationActive=false
-  blocker.classList.remove("show")
+function clearBlock(){
+  _blockerActive=false
+  blocker.classList.remove('show')
 }
 
-function setPhase(p){
-  const phases={idle:"phase-idle",rack:"phase-rack",rotate:"phase-rotate",scan:"phase-scan",done:"phase-done"}
-  phaseBadge.className="phase-badge "+(phases[p]||"phase-idle")
-  phaseBadge.textContent=p.toUpperCase()
-}
-
+// ════════════════════════════════════════════════
+//  STEP PILLS
+// ════════════════════════════════════════════════
 function updateSteps(){
-  const steps=["step1","step2","step3"]
-  const map={rack:0,rotate:1,scan:2,done:3}
+  const map={idle:-1, rack:0, scan:1, done:2}
   const cur=map[phase]??-1
-  steps.forEach((id,i)=>{
-    const el=document.getElementById(id)
-    el.className="step"
-    if(i<cur) el.classList.add("done")
-    else if(i===cur) el.classList.add("active")
-  })
-}
-
-function updateZoneBar(){
-  for(let z=0;z<N_ZONES;z++){
-    const el=document.getElementById("z"+z)
-    if(zonesSeen.has(z)) el.className="zone done"
-    else if(zoneHistory.slice(-10).some(h=>h.has(z))) el.className="zone active"
-    else el.className="zone"
+  for(let i=0;i<3;i++){
+    const el=document.getElementById('step'+(i+1))
+    el.className='step'
+    if(i<cur) el.classList.add('done')
+    else if(i===cur) el.classList.add('active')
   }
 }
 
-// ─── Frame analysis ───────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════
+//  ZONE PIPS
+// ════════════════════════════════════════════════
+function updateZonePips(){
+  for(let z=0;z<5;z++){
+    const el=document.getElementById('zp'+z)
+    if(zonesSeen.has(z)) el.className='zp done'
+    else el.className='zp'
+  }
+}
 
-// Sample frame pixels to check brightness + edge fill
-function analyzeFrame(){
-  ctx.drawImage(video,0,0,canvas.width,canvas.height)
-  const imgData = ctx.getImageData(0,0,canvas.width,canvas.height)
-  const d = imgData.data
-  const w = canvas.width, h = canvas.height
+// ════════════════════════════════════════════════
+//  FRAME ANALYSIS  (uses offscreen canvas — no flicker)
+// ════════════════════════════════════════════════
+function grabOffscreen(){
+  offCtx.drawImage(video,0,0,offW,offH)
+  return offCtx.getImageData(0,0,offW,offH)
+}
 
-  let brightSum=0, edgeCount=0, totalSampled=0
-  const step=24
+// Check rack visibility: good brightness + enough edges
+function analyzeRackFrame(){
+  const d=grabOffscreen().data
+  let bright=0, edges=0, total=0
+  const step=4  // sample every 4th pixel (in pixel units = 16 data slots)
 
-  for(let y=0;y<h;y+=step){
-    for(let x=0;x<w;x+=step){
-      const i=(y*w+x)*4
-      const lum=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)
-      brightSum+=lum
-      totalSampled++
+  for(let y=0;y<offH;y+=step){
+    for(let x=0;x<offW;x+=step){
+      const i=(y*offW+x)*4
+      const lum=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114
+      bright+=lum
+      total++
 
-      // Sobel-like horizontal edge (compare to neighbour)
-      if(x+step<w){
-        const j=(y*w+x+step)*4
-        const lumR=(d[j]*0.299+d[j+1]*0.587+d[j+2]*0.114)
-        if(Math.abs(lum-lumR)>25) edgeCount++
+      // Compare to right neighbour for edge
+      if(x+step<offW){
+        const j=(y*offW+x+step)*4
+        const lumR=d[j]*0.299+d[j+1]*0.587+d[j+2]*0.114
+        if(Math.abs(lum-lumR)>20) edges++
       }
     }
   }
 
-  const brightness = brightSum/totalSampled
-  const edgeRatio  = edgeCount/totalSampled
-
-  return {brightness, edgeRatio}
+  const brightness=bright/total
+  const edgeRatio=edges/total
+  // Rack: must have visible content (not too dark, not pure white)
+  // and enough structural edges
+  return {
+    ok: brightness>18 && brightness<240 && edgeRatio>0.05,
+    brightness,
+    edgeRatio
+  }
 }
 
-// Check if camera is covering the edge zones (full rack in frame)
-function detectFullRackCoverage(){
-  const {brightness, edgeRatio} = analyzeFrame()
-  // Rack should have decent brightness (not too dark = covered, not overexposed)
-  // and significant edges (metal rack structure)
-  return brightness>25 && brightness<230 && edgeRatio>0.04
-}
-
-// Check pan direction + speed by comparing frame columns
-function detectPanLR(){
-  ctx.drawImage(video,0,0,canvas.width,canvas.height)
-  const frame = ctx.getImageData(0,0,canvas.width,canvas.height)
+// Detect pan motion and direction by comparing mean columns
+function detectPan(){
+  const frame=grabOffscreen()
 
   if(!prevFrameData){
     prevFrameData=frame
-    return {valid:true, tooFast:false, tooSlow:false, wrongDir:false, motion:0}
+    return {motion:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false}
   }
 
   const d1=frame.data, d2=prevFrameData.data
-  const w=canvas.width, h=canvas.height
-  const step=32
+  // Compare left third vs right third column means
+  let diffAcc=0, samples=0
 
-  // Sample left strip vs right strip to estimate horizontal motion
-  let leftDiff=0, rightDiff=0, samples=0
-
-  for(let y=0;y<h;y+=step){
-    for(let x=0;x<Math.floor(w/3);x+=step){
-      const i=(y*w+x)*4
-      leftDiff+=d1[i]-d2[i]
+  for(let y=0;y<offH;y+=3){
+    for(let x=0;x<offW;x+=3){
+      const i=(y*offW+x)*4
+      diffAcc+=(d1[i]+d1[i+1]+d1[i+2])-(d2[i]+d2[i+1]+d2[i+2])
       samples++
-    }
-    for(let x=Math.floor(w*2/3);x<w;x+=step){
-      const i=(y*w+x)*4
-      rightDiff+=d1[i]-d2[i]
     }
   }
 
-  leftDiff/=samples; rightDiff/=samples
-  const motion=(leftDiff+rightDiff)/2
+  const motion=diffAcc/samples
+  prevFrameData=frame
 
-  motionHistory.push(motion)
-  if(motionHistory.length>8) motionHistory.shift()
+  // Smooth motion
+  motionBuf.push(motion)
+  if(motionBuf.length>MOTION_BUF) motionBuf.shift()
+  const smooth=motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
+  const speed=Math.abs(smooth)
 
-  const smoothed = motionHistory.reduce((a,b)=>a+b,0)/motionHistory.length
-  const speed    = Math.abs(smoothed)
-
-  prevFrameData = frame
-
-  // Estimate zone from pan progress
   return {
-    valid:  speed>0.5 && speed<18 && smoothed<0,
-    tooFast: speed>18,
-    tooSlow: speed<0.5,
-    wrongDir: smoothed>0.8,
-    motion: smoothed,
-    speed
+    motion:smooth,
+    speed,
+    tooFast: speed>22,
+    tooSlow: speed<0.8,
+    wrongDir: smooth>2.5  // positive = moving right-to-left (wrong)
   }
 }
 
-// ─── Canvas overlay drawing ────────────────────────────────────────────────────
-function drawRackBox(){
-  const w=canvas.width, h=canvas.height
-  const bw=w*0.78, bh=h*0.82
-  const bx=(w-bw)/2, by=(h-bh)/2
+// ════════════════════════════════════════════════
+//  DEVICE MOTION (shake)
+// ════════════════════════════════════════════════
+window.addEventListener('devicemotion', e=>{
+  const a=e.accelerationIncludingGravity
+  if(a) accelMag=Math.abs(a.x)+Math.abs(a.y)+Math.abs(a.z)
+})
 
-  // Animated border
+// ════════════════════════════════════════════════
+//  CANVAS OVERLAY DRAWING
+// ════════════════════════════════════════════════
+function drawRackGuide(){
+  const W=canvas.width, H=canvas.height
+  const bw=W*0.88, bh=H*0.86
+  const bx=(W-bw)/2, by=(H-bh)/2
   const t=Date.now()/1000
-  const alpha=0.6+Math.sin(t*3)*0.2
 
-  ctx.strokeStyle=`rgba(255,204,0,${alpha})`
-  ctx.lineWidth=2.5
-  ctx.setLineDash([16,8])
-  ctx.lineDashOffset=-t*30
+  // Animated dashed border
+  ctx.save()
+  ctx.strokeStyle=`rgba(255,204,0,${0.55+Math.sin(t*2.5)*0.2})`
+  ctx.lineWidth=2
+  ctx.setLineDash([14,7])
+  ctx.lineDashOffset=-(t*25)%21
   ctx.strokeRect(bx,by,bw,bh)
   ctx.setLineDash([])
 
-  // Corner accents
-  const cs=24, lw=3
-  ctx.strokeStyle="#ffcc00"
+  // Corner L-brackets
+  const cs=20, lw=2.5
+  ctx.strokeStyle='#ffcc00'
   ctx.lineWidth=lw
-  const corners=[[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]]
-  corners.forEach(([cx,cy],i)=>{
-    const sx=i%2===0?1:-1, sy=i<2?1:-1
-    ctx.beginPath(); ctx.moveTo(cx+sx*cs,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+sy*cs); ctx.stroke()
+  ;[[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,sx,sy])=>{
+    ctx.beginPath()
+    ctx.moveTo(cx+sx*cs,cy)
+    ctx.lineTo(cx,cy)
+    ctx.lineTo(cx,cy+sy*cs)
+    ctx.stroke()
   })
 
-  // Grid lines (units)
-  const rows=8
-  ctx.strokeStyle="rgba(0,229,255,0.2)"
+  // Faint horizontal unit-dividers (8 units)
+  ctx.strokeStyle='rgba(255,255,255,0.07)'
   ctx.lineWidth=1
-  for(let r=1;r<rows;r++){
-    const ry=by+bh*(r/rows)
+  for(let r=1;r<8;r++){
+    const ry=by+bh*(r/8)
     ctx.beginPath(); ctx.moveTo(bx,ry); ctx.lineTo(bx+bw,ry); ctx.stroke()
   }
+  ctx.restore()
 }
 
-function drawScanArrow(){
-  const t=Date.now()/600
-  const w=canvas.width, h=canvas.height
-  const x=(Math.sin(t)*0.45+0.5)*w*0.7+w*0.15
-  const y=h/2
-
-  ctx.font=`bold 42px sans-serif`
-  ctx.fillStyle=`rgba(0,229,255,${0.7+Math.sin(t*2)*0.3})`
-  ctx.textAlign="center"
-  ctx.fillText("→",x,y)
-  ctx.textAlign="left"
+function drawScanGuide(){
+  const W=canvas.width, H=canvas.height
+  const t=Date.now()/500
+  // Animated arrow sweeping L→R
+  const x=(Math.sin(t)*0.45+0.55)*W*0.75+W*0.1
+  ctx.save()
+  ctx.font=`bold 44px sans-serif`
+  ctx.fillStyle=`rgba(0,229,255,${0.6+Math.sin(t*2)*0.25})`
+  ctx.textAlign='center'
+  ctx.textBaseline='middle'
+  ctx.fillText('→',x,H*0.5)
+  ctx.restore()
 }
 
-function drawScanZones(){
-  const w=canvas.width, h=canvas.height
-  const zw=w/N_ZONES
-  for(let z=0;z<N_ZONES;z++){
-    const x1=z*zw, y1=0
-    if(zonesSeen.has(z)){
-      ctx.fillStyle="rgba(0,255,136,0.08)"
-      ctx.fillRect(x1,y1,zw,h)
-      ctx.strokeStyle="rgba(0,255,136,0.4)"
-      ctx.lineWidth=1.5
-      ctx.strokeRect(x1,y1,zw,h)
-    }
-  }
+function drawShakeVignette(){
+  if(accelMag<25) return
+  const W=canvas.width,H=canvas.height
+  const g=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.7)
+  g.addColorStop(0,'rgba(255,50,50,0)')
+  g.addColorStop(1,`rgba(255,50,50,${Math.min(0.45,(accelMag-25)/60)})`)
+  ctx.fillStyle=g
+  ctx.fillRect(0,0,W,H)
 }
 
-function drawShakeWarning(){
-  if(shakeLevel>28){
-    ctx.fillStyle="rgba(255,60,60,0.08)"
-    ctx.fillRect(0,0,canvas.width,canvas.height)
-  }
-}
+// ════════════════════════════════════════════════
+//  PHASE: RACK
+// ════════════════════════════════════════════════
+function processRack(now){
+  const elapsed=now-rackPhaseStart
 
-// ─── Shake detection ──────────────────────────────────────────────────────────
-window.addEventListener("devicemotion",e=>{
-  const acc=e.accelerationIncludingGravity
-  if(acc) shakeLevel=Math.abs(acc.x)+Math.abs(acc.y)+Math.abs(acc.z)
-})
-
-// ─── Phase logic helpers ──────────────────────────────────────────────────────
-let rackHoldStart=null
-let rackGoodStreak=0
-
-function processRackPhase(now){
-  updateSteps()
-
-  // Must be portrait
-  if(!isPortrait()){
-    showViolation("📱","Hold Phone Vertically","For the full rack shot, your phone must be in PORTRAIT (vertical) orientation.")
-    showGuide("error","Wrong Orientation","Rotate your phone vertically to capture the full rack height.")
+  // Settle for 2s — camera/exposure needs time
+  if(elapsed<2000){
+    showToast('info','📐','Step 1 — Full Rack','Align so the ENTIRE rack fits top to bottom in frame.')
+    clearBlock()
     return
   }
 
-  clearViolation()
+  const {ok, brightness}=analyzeRackFrame()
 
-  // Wait 3s after recording starts for camera to settle
-  const elapsed=now-rackTimer
-  if(elapsed<2500){
-    showGuide("info","Step 1: Full Rack","Point camera at the rack from a distance so the ENTIRE rack fits in the frame.")
-    return
-  }
-
-  // Check frame content
-  const rackOk = detectFullRackCoverage()
-
-  if(rackOk){
+  if(ok){
     if(!rackHoldStart) rackHoldStart=now
     rackGoodStreak++
     const held=now-rackHoldStart
-    const pct=Math.min(100,Math.round((held/3000)*100))
-    showGuide("success","Full Rack Detected!",`Hold steady… ${pct}% — keep the full rack in frame.`)
+    const pct=Math.round(Math.min(100,(held/RACK_HOLD_MS)*100))
 
-    if(held>=3000 && rackGoodStreak>=5){
-      rackConfirmed=true
-      phase="rotate"
-      rackHoldStart=null
-      rackGoodStreak=0
-      rotateTimer=now
-      setPhase("rotate")
-      updateSteps()
-      showGuide("success","✅ Rack Captured!","Now ROTATE your phone HORIZONTALLY to landscape mode.")
+    if(pct<100){
+      showToast('ok','✅','Rack in Frame!',`Hold steady… ${pct}%`)
+      clearBlock()
+    }
+
+    if(held>=RACK_HOLD_MS && rackGoodStreak>=4){
+      // ✅ Rack confirmed — show rotate hint for 2.5s then auto-enter scan
+      transitionToScan()
     }
   } else {
     rackHoldStart=null
     rackGoodStreak=0
 
-    const {brightness}=analyzeFrame()
-    if(brightness<25){
-      showViolation("🌑","Too Dark","The rack is not visible. Move to a better lit area or get closer.")
-      showGuide("error","Too Dark","Ensure the rack is well lit and fully visible in frame.")
+    if(brightness<18){
+      showBlock('🌑','Too Dark','Move to a brighter area or turn on more lights so the rack is clearly visible.')
+      showToast('err','🌑','Too Dark','Rack not visible — improve lighting.')
     } else {
-      showViolation("📐","Rack Not Fully Visible","Step back until the ENTIRE rack (top to bottom, left to right) fills the frame.")
-      showGuide("error","Step Back","Move camera back to fit the complete rack in frame. Align with the dashed guide.")
+      showBlock('📐','Show Full Rack','Step back until the ENTIRE rack (top to bottom) fills the frame.')
+      showToast('warn','📐','Step 1 — Full Rack','Move back until the whole rack fits in frame.')
     }
   }
 }
 
-function processRotatePhase(now){
-  updateSteps()
-  if(!isLandscape()){
-    orientMsg.textContent="Rotate phone horizontally →"
-    orientLock.classList.add("show")
-    showGuide("warning","Rotate Phone","Rotate to LANDSCAPE (horizontal) mode for the scan step.")
-    return
-  }
-  orientLock.classList.remove("show")
-  clearViolation()
+let rotateHintTimer=null
 
-  const held=now-rotateTimer
-  if(held<1200){
-    showGuide("success","Landscape ✓","Stabilizing… get ready to scan.")
-    return
-  }
-  phase="scan"
-  scanStart=now
-  prevFrameData=null
-  motionHistory=[]
-  zonesSeen=new Set()
-  setPhase("scan")
+function transitionToScan(){
+  phase='scan-prep'
+  clearBlock()
   updateSteps()
-  zonebar.classList.add("show")
-  showGuide("info","Step 3: Sweep L→R","Pan camera slowly from LEFT to RIGHT across the rack unit. Fill all 5 zones.")
+
+  // Show rotate hint for 2.5 seconds (informational only, not blocking)
+  rotateHint.classList.add('show')
+  rotateHintTimer=setTimeout(()=>{
+    rotateHint.classList.remove('show')
+    phase='scan'
+    scanStart=Date.now()
+    prevFrameData=null
+    motionBuf=[]
+    zonesSeen=new Set()
+    currentUnit=1
+    stallSince=null
+    wrongDirSince=null
+    fastSince=null
+    unitLabel.classList.add('show')
+    unitNum.textContent='1'
+    zoneprogress.classList.add('show')
+    pauseBtn.textContent='⏸'
+    updateSteps()
+    updateZonePips()
+    showToast('info','→','Scan Unit 1','Pan camera slowly LEFT → RIGHT across the unit row.')
+  }, 2500)
 }
 
-let stallTimer=null
-
-function processScanPhase(now){
+// ════════════════════════════════════════════════
+//  PHASE: SCAN
+// ════════════════════════════════════════════════
+function processScan(now){
   if(paused) return
-  updateSteps()
 
-  if(!isLandscape()){
-    orientMsg.textContent="Stay in landscape mode →"
-    orientLock.classList.add("show")
-    scanStart=now
-    prevFrameData=null
+  // ── Shake check ───────────────────────────────
+  if(accelMag>30){
+    shakeBlock=true
+    showBlock('🤚','Too Shaky','Hold camera steady. Only slow deliberate movement — left to right.')
+    showToast('err','🤚','Shaking','Hold camera steady!')
     return
   }
-  orientLock.classList.remove("show")
-
-  // Shake check
-  if(shakeLevel>28){
-    showViolation("🤚","Too Shaky","Hold the camera steady while scanning. Slow controlled movement only.")
-    showGuide("error","Hold Steady","Stop shaking. Move the camera in a smooth, slow arc.")
-    scanStart=now
-    return
+  if(shakeBlock && accelMag<20){
+    shakeBlock=false
+    clearBlock()
   }
+  if(shakeBlock) return
 
-  clearViolation()
+  const pan=detectPan()
 
-  const pan=detectPanLR()
-
+  // ── Wrong direction ───────────────────────────
   if(pan.wrongDir){
-    showViolation("⬅️","Wrong Direction!","You must sweep LEFT → RIGHT only. Reverse direction will break the scan.")
-    showGuide("error","Wrong Direction!","Only sweep from LEFT to RIGHT. Do not pan backwards.")
-    scanStart=now
-    prevFrameData=null
-    if(pan.speed>1.5) zonesSeen=new Set() // reset zones on reverse
-    return
-  }
-
-  if(pan.tooFast){
-    showViolation("🐇","Moving Too Fast","Slow down! Sweep the camera slowly to capture every part of the rack.")
-    showGuide("error","Slow Down","Move the camera much slower. You're missing details.")
-    return
-  }
-
-  if(pan.tooSlow && now-scanStart>4000){
-    if(!stallTimer) stallTimer=now
-    if(now-stallTimer>3000){
-      showViolation("🐢","Not Moving","Pan the camera LEFT → RIGHT across the rack. Don't stay still.")
-      showGuide("warning","Start Panning","Move the camera from left to right across the unit.")
+    if(!wrongDirSince) wrongDirSince=now
+    if(now-wrongDirSince>400){
+      showBlock('⬅️','Wrong Direction!','You must pan LEFT → RIGHT only.\nPanning right-to-left is not allowed.')
+      showToast('err','⬅️','Wrong Direction','Pan only from LEFT to RIGHT.')
+      // Reset zones on sustained reverse pan
+      if(now-wrongDirSince>1200){
+        zonesSeen=new Set()
+        updateZonePips()
+      }
+      return
     }
-    return
   } else {
-    stallTimer=null
+    if(wrongDirSince) clearBlock()
+    wrongDirSince=null
   }
 
-  clearViolation()
-
-  // Estimate current zone from motion accumulation
-  const motionAcc = motionHistory.reduce((a,b)=>a+b,0)
-  const zoneEstimate = Math.min(N_ZONES-1, Math.max(0, Math.floor((zonesSeen.size)+(Math.abs(motionAcc)/8))))
-  const activeZones = new Set([Math.min(N_ZONES-1, zoneEstimate)])
-  zoneHistory.push(activeZones)
-  if(zoneHistory.length>20) zoneHistory.shift()
-
-  // Auto-advance zones based on elapsed time + motion
-  if(pan.valid && now-scanStart>1500){
-    const t=(now-scanStart)/1000
-    const newZone=Math.min(N_ZONES-1,Math.floor(t/1.8))
-    if(!zonesSeen.has(newZone)) zonesSeen.add(newZone)
+  // ── Too fast ──────────────────────────────────
+  if(pan.tooFast){
+    if(!fastSince) fastSince=now
+    if(now-fastSince>400){
+      showBlock('🐇','Moving Too Fast','Slow down! Move the camera slowly and steadily for a clean scan.')
+      showToast('err','🐇','Too Fast','Slow down your panning speed.')
+      return
+    }
+  } else {
+    if(fastSince) clearBlock()
+    fastSince=null
   }
 
-  updateZoneBar()
+  // ── Stall check (not moving) ──────────────────
+  if(pan.tooSlow){
+    if(!stallSince) stallSince=now
+    if(now-stallSince>3500){
+      showBlock('🐢','Not Moving','Start panning! Move the camera slowly from LEFT to RIGHT.')
+      showToast('warn','🐢','Not Moving','Pan the camera left to right across the unit.')
+      return
+    }
+    if(now-stallSince>1500){
+      showToast('warn','→','Keep Moving','Slowly pan LEFT → RIGHT across the unit.')
+      return
+    }
+  } else {
+    if(stallSince) clearBlock()
+    stallSince=null
+  }
+
+  // ── Good motion — advance zones ───────────────
+  clearBlock()
+
+  const elapsed=now-scanStart
+  // Advance zones by time (each zone ~1.4s)
+  const newZone=Math.min(4, Math.floor(elapsed/1400))
+  if(!zonesSeen.has(newZone) && !pan.tooSlow){
+    zonesSeen.add(newZone)
+    updateZonePips()
+  }
 
   const covered=zonesSeen.size
-  const remaining=N_ZONES-covered
+  const remaining=5-covered
 
-  if(covered<N_ZONES){
-    showGuide("info",`Scanning… Zone ${covered}/${N_ZONES}`,
-      remaining===1
-      ? "Almost done! Sweep to the RIGHT end of the unit."
-      : `Keep panning RIGHT. ${remaining} zones remaining.`
-    )
+  if(covered<5){
+    const msgs=[
+      'Keep panning RIGHT →',
+      'Good — keep going RIGHT →',
+      `Almost there — ${remaining} zone${remaining>1?'s':''} left →`,
+      'Nearly done — sweep to the right end →'
+    ]
+    showToast('info','→','Scanning Unit '+currentUnit, msgs[Math.min(3,covered)] )
   }
 
-  if(now-scanStart>N_ZONES*1.8*1000+500){
-    // Unit scan complete
+  // ── Unit scan complete ─────────────────────────
+  if(elapsed>7500 && covered>=4){
+    // Mark unit done — pause and wait for user to move to next unit
     zonesSeen=new Set([0,1,2,3,4])
-    updateZoneBar()
+    updateZonePips()
     paused=true
-    pauseBtn.textContent="▶"
-    phase="waitpause"
-    showGuide("success","Unit Scanned ✅","Move to the next rack unit, then press ▶ to continue scanning.")
-    clearViolation()
+    pauseBtn.textContent='▶'
+    currentUnit++
+    unitNum.textContent=currentUnit
+    clearBlock()
+    showToast('ok','✅','Unit Scanned!','Move to the NEXT unit row, then press ▶ to scan it.')
   }
 }
 
-// ─── Main render loop ─────────────────────────────────────────────────────────
-function update(){
+// ════════════════════════════════════════════════
+//  CANVAS SIZE SYNC
+// ════════════════════════════════════════════════
+function syncCanvas(){
   canvas.width=window.innerWidth
   canvas.height=window.innerHeight
+}
+syncCanvas()
+window.addEventListener('resize', syncCanvas)
 
+// ════════════════════════════════════════════════
+//  MAIN RENDER LOOP
+// ════════════════════════════════════════════════
+function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height)
 
-  // Always draw rack overlay guide
-  if(recording){
-    drawShakeWarning()
-    drawRackBox()
-    if(phase==="scan") {
-      drawScanZones()
-      if(!paused) drawScanArrow()
-    }
+  if(recording && (phase==='rack' || phase==='scan-prep')){
+    drawRackGuide()
+    drawShakeVignette()
+  }
+
+  if(recording && phase==='scan'){
+    drawRackGuide()
+    if(!paused) drawScanGuide()
+    drawShakeVignette()
   }
 
   if(recording){
     const now=Date.now()
-    if(phase==="rack")      processRackPhase(now)
-    else if(phase==="rotate") processRotatePhase(now)
-    else if(phase==="scan" || phase==="waitpause") processScanPhase(now)
+    if(phase==='rack')       processRack(now)
+    else if(phase==='scan')  processScan(now)
+    // scan-prep: just show hint overlay, nothing else
   }
 
-  requestAnimationFrame(update)
+  requestAnimationFrame(loop)
 }
 
-window.addEventListener("resize",()=>{
-  canvas.width=window.innerWidth
-  canvas.height=window.innerHeight
-})
-
-update()
+loop()
 </script>
 </body>
 </html>
