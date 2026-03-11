@@ -551,6 +551,7 @@ pauseBtn.onclick = ()=>{
     prevFrameData = null; motionBuf = []
     zonesSeen = new Set(); scanStart = Date.now()
     wrongDirSince = null; wrongDirCount = 0
+    notHorizSince = null; notHorizCount = 0
     fastSince = null; stallSince = null
     updateZonePips()
     showToast('info','→','Scan Unit '+currentUnit,
@@ -713,25 +714,97 @@ function analyzeRackFrame(){
   return { ok, brightness:b, tooClose, tooDark, noFullCoverage }
 }
 
-// Pan detection — returns motion direction and speed from frame diff
+// Pan detection — proper horizontal vs vertical optical flow using block matching.
+// Splits frame into a grid of blocks, finds best horizontal and vertical shift
+// for each block, and computes net X and Y motion independently.
+// This correctly distinguishes left/right panning from top/bottom tilting.
+const BLOCK = 16   // block size in px (on offscreen 160x120 canvas)
+const SEARCH = 6   // search range ±px
+
 function detectPan(){
   const frame = grabOff()
-  if(!prevFrameData){ prevFrameData=frame; return{motion:0,speed:0,tooFast:false,tooSlow:true,wrongDir:false} }
-  const d1=frame.data, d2=prevFrameData.data
-  let acc=0, n=0
-  for(let y=0;y<offH;y+=3){
-    for(let x=0;x<offW;x+=3){
-      const i=(y*offW+x)*4
-      acc += (d1[i]+d1[i+1]+d1[i+2]) - (d2[i]+d2[i+1]+d2[i+2])
-      n++
+  if(!prevFrameData){
+    prevFrameData = frame
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false, notHorizontal:false }
+  }
+
+  const d1 = frame.data
+  const d2 = prevFrameData.data
+  prevFrameData = frame
+
+  // Helper: luminance of pixel at (x,y) in a flat RGBA array
+  function lum(d, x, y){
+    if(x<0||x>=offW||y<0||y>=offH) return 0
+    const i=(y*offW+x)*4
+    return d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
+  }
+
+  // For each block in a sparse grid, find the shift (dx,dy) that minimises SAD
+  let totalDx=0, totalDy=0, blockCount=0
+  const stepX = BLOCK*2, stepY = BLOCK*2   // sparse grid — every other block
+  for(let by=BLOCK; by<offH-BLOCK; by+=stepY){
+    for(let bx=BLOCK; bx<offW-BLOCK; bx+=stepX){
+      let bestSAD=Infinity, bestDx=0, bestDy=0
+      for(let dy=-SEARCH; dy<=SEARCH; dy++){
+        for(let dx=-SEARCH; dx<=SEARCH; dx++){
+          let sad=0
+          // Sample 5x5 points within the block (fast)
+          for(let sy=0; sy<BLOCK; sy+=3){
+            for(let sx=0; sx<BLOCK; sx+=3){
+              sad += Math.abs(
+                lum(d1, bx+sx,       by+sy      ) -
+                lum(d2, bx+sx+dx,    by+sy+dy   )
+              )
+            }
+          }
+          if(sad < bestSAD){ bestSAD=sad; bestDx=dx; bestDy=dy }
+        }
+      }
+      // Only count blocks with meaningful motion (filter static background)
+      if(bestSAD > 80){
+        totalDx += bestDx
+        totalDy += bestDy
+        blockCount++
+      }
     }
   }
-  prevFrameData = frame
-  motionBuf.push(acc/n)
+
+  if(blockCount === 0){
+    // No moving blocks — scene is static
+    motionBuf.push(0)
+    if(motionBuf.length>MOTION_BUF) motionBuf.shift()
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false, notHorizontal:false }
+  }
+
+  const avgDx = totalDx / blockCount   // + = rightward pan
+  const avgDy = totalDy / blockCount   // + = downward tilt
+
+  // Buffer horizontal motion for smoothing
+  motionBuf.push(avgDx)
   if(motionBuf.length>MOTION_BUF) motionBuf.shift()
-  const smooth = motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
-  const speed  = Math.abs(smooth)
-  return { motion:smooth, speed, tooFast:speed>22, tooSlow:speed<0.8, wrongDir:smooth>2.5 }
+  const smoothX = motionBuf.reduce((a,b)=>a+b,0)/motionBuf.length
+
+  const absX = Math.abs(smoothX)
+  const absY = Math.abs(avgDy)
+
+  // Determine if motion is dominantly horizontal
+  // Require: horizontal component > 1.8× vertical component
+  const isHorizontal = absX > 1.8 * absY
+
+  // wrongDir = moving LEFT (smoothX > +2.5 means scene shifts right → camera moves LEFT)
+  const wrongDir    = smoothX > 2.5
+  // notHorizontal = moving but not left-right (top-to-bottom, diagonal, etc.)
+  const notHorizontal = !isHorizontal && (absX > 0.5 || absY > 0.5)
+
+  return {
+    motionX: smoothX,
+    motionY: avgDy,
+    speed:   absX,
+    tooFast: absX > 5.5,
+    tooSlow: absX < 0.6 || !isHorizontal,
+    wrongDir,
+    notHorizontal
+  }
 }
 
 // ── Sensors ───────────────────────────────────────────────────────────────────
@@ -787,7 +860,7 @@ function processRack(now){
     clearBlock(); return
   }
 
-  const {ok, brightness, tooClose, tooDark, noDetail} = analyzeRackFrame()
+  const {ok, brightness, tooClose, tooDark, noFullCoverage} = analyzeRackFrame()
 
   if(ok){
     if(!rackHoldStart) rackHoldStart = now
@@ -858,6 +931,9 @@ function transitionToScan(){
 }
 
 // ── Phase: Scan ───────────────────────────────────────────────────────────────
+let notHorizSince  = null
+let notHorizCount  = 0
+
 function processScan(now){
   if(paused) return
 
@@ -873,12 +949,45 @@ function processScan(now){
 
   const pan = detectPan()
 
-  // ── Wrong direction detection & enforcement ───────────────────────────────
+  // ── Not horizontal (top-to-bottom / diagonal) ─────────────────────────────
+  if(pan.notHorizontal){
+    if(!notHorizSince) notHorizSince = now
+    if(now - notHorizSince > 600){
+      notHorizCount++
+      if(notHorizCount === 1){
+        // First offence — warn and reset zones
+        showBlock('↕️','Wrong Direction!',
+          'You must sweep LEFT → RIGHT only.\nDo NOT move the camera up or down.')
+        showToast('err','↕️','Not Left→Right!',
+          'Sweep horizontally LEFT → RIGHT only. Zones reset.')
+        zonesSeen=new Set(); updateZonePips()
+        scanStart=now
+        prevFrameData=null; motionBuf=[]
+        notHorizSince=null
+        wrongDirSince=null; wrongDirCount=0
+        return
+      }
+      if(notHorizCount >= 2){
+        stopAndFail(
+          'You did not sweep LEFT → RIGHT.\n' +
+          'The camera must move horizontally across the rack.\n' +
+          'Please record again from the beginning.'
+        )
+        return
+      }
+    }
+    showToast('err','↕️','Sweep Sideways!','Move camera LEFT → RIGHT — not up/down.')
+    return
+  } else {
+    if(notHorizSince) clearBlock()
+    notHorizSince = null
+  }
+
+  // ── Wrong direction (panning LEFT instead of RIGHT) ───────────────────────
   if(pan.wrongDir){
     if(!wrongDirSince) wrongDirSince=now
     if(now-wrongDirSince>400){
       wrongDirCount++
-      // First offence — warn and reset zones
       if(wrongDirCount === 1){
         showBlock('⬅️','Wrong Direction!',
           'You must sweep LEFT → RIGHT only.\nZones reset — start from the left again.')
@@ -887,10 +996,10 @@ function processScan(now){
         zonesSeen=new Set(); updateZonePips()
         scanStart=now
         prevFrameData=null; motionBuf=[]
-        wrongDirSince=null   // reset timer so second offence is fresh
+        wrongDirSince=null
+        notHorizSince=null; notHorizCount=0
         return
       }
-      // Second offence — stop recording entirely
       if(wrongDirCount >= 2){
         stopAndFail(
           'You swept in the wrong direction twice.\n' +
@@ -900,6 +1009,7 @@ function processScan(now){
         return
       }
     }
+    showToast('err','⬅️','Wrong Way!','Pan LEFT → RIGHT only.')
     return
   } else {
     if(wrongDirSince) clearBlock()
@@ -930,8 +1040,8 @@ function processScan(now){
 
   clearBlock()
 
-  // Advance zones only with valid rightward motion
-  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir){
+  // Advance zones only with valid rightward horizontal motion
+  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir && !pan.notHorizontal){
     const elapsed = now - scanStart
     const earnedZone = Math.min(N_ZONES-1, Math.floor(elapsed / 1400))
     if(!zonesSeen.has(earnedZone)){
@@ -960,6 +1070,7 @@ function processScan(now){
   scanStart = Date.now()
   prevFrameData = null; motionBuf = []
   wrongDirSince = null; wrongDirCount = 0
+  notHorizSince = null; notHorizCount = 0
   fastSince = null; stallSince = null
   clearBlock()
   showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
