@@ -539,9 +539,15 @@ pauseBtn.onclick = ()=>{
   if(!recording || phase !== 'scan') return
   paused = !paused
   if(paused){
+    // Actually pause the MediaRecorder so no data is captured while paused
+    if(recorder.state === 'recording') recorder.pause()
+    recIndicator.style.opacity = '0.35'
     pauseBtn.textContent = '▶'; clearBlock()
     showToast('warn','⏸','Paused','Move to the next unit row, then press ▶.')
   } else {
+    // Resume the MediaRecorder so recording continues
+    if(recorder.state === 'paused') recorder.resume()
+    recIndicator.style.opacity = '1'
     pauseBtn.textContent = '⏸'
     pauseBtn.classList.remove('enabled')  // locked until all 5 zones done
     prevFrameData = null; motionBuf = []
@@ -685,11 +691,6 @@ function processRack(now){
   }
   const {ok, brightness} = analyzeRackFrame()
   if(ok){
-    // Rack good — resume recorder if it had been paused briefly
-    if(recorder.state === 'paused'){
-      recorder.resume()
-      recIndicator.style.opacity = '1'
-    }
     if(!rackHoldStart) rackHoldStart = now
     const held = now - rackHoldStart
     const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
@@ -745,8 +746,6 @@ function transitionToScan(){
     else{
       clearInterval(tick)
       rotateHint.classList.remove('show')
-      // Ensure recorder is active going into scan (may have been paused during rack)
-      if(recorder.state === 'paused') recorder.resume()
       recIndicator.style.opacity = '1'
       // Auto-rotate UI — no user input needed
       setLandscape(true)
