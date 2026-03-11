@@ -551,7 +551,7 @@ pauseBtn.onclick = ()=>{
     prevFrameData = null; motionBuf = []
     zonesSeen = new Set(); scanStart = Date.now()
     wrongDirSince = null; wrongDirCount = 0
-    notHorizSince = null; notHorizCount = 0
+    
     fastSince = null; stallSince = null
     updateZonePips()
     showToast('info','→','Scan Unit '+currentUnit,
@@ -725,7 +725,7 @@ function detectPan(){
   const frame = grabOff()
   if(!prevFrameData){
     prevFrameData = frame
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false, notHorizontal:false }
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false:false }
   }
 
   const d1 = frame.data
@@ -773,7 +773,7 @@ function detectPan(){
     // No moving blocks — scene is static
     motionBuf.push(0)
     if(motionBuf.length>MOTION_BUF) motionBuf.shift()
-    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false, notHorizontal:false }
+    return { motionX:0, motionY:0, speed:0, tooFast:false, tooSlow:true, wrongDir:false:false }
   }
 
   const avgDx = totalDx / blockCount   // + = rightward pan
@@ -789,13 +789,11 @@ function detectPan(){
 
   const isHorizontal = absX > 1.8 * absY
 
-  // wrongDir = moving LEFT (scene shifts right → camera moves LEFT)
   const wrongDir      = smoothX > 2.5
-  // notHorizontal = sustained non-horizontal motion (vertical/diagonal)
-  const notHorizontal = !isHorizontal && (absX > 0.5 || absY > 0.5)
-  // tooSlow only meaningful when motion IS horizontal — don't flag it otherwise
-  const tooSlow       = isHorizontal && absX < 0.6
-  // tooFast only when horizontal
+  const = !isHorizontal && (absX > 0.5 || absY > 0.5)
+  // tooSlow = true whenever the camera is NOT making valid leftward progress:
+  // covers stationary, vertical, diagonal — anything that isn't a clean left→right sweep
+  const tooSlow       = !isHorizontal || absX < 0.6
   const tooFast       = isHorizontal && absX > 5.5
 
   return {
@@ -804,8 +802,7 @@ function detectPan(){
     speed:   absX,
     tooFast,
     tooSlow,
-    wrongDir,
-    notHorizontal
+    wrongDir
   }
 }
 
@@ -933,9 +930,6 @@ function transitionToScan(){
 }
 
 // ── Phase: Scan ───────────────────────────────────────────────────────────────
-let notHorizSince  = null
-let notHorizCount  = 0
-
 function processScan(now){
   if(paused) return
 
@@ -950,42 +944,6 @@ function processScan(now){
   if(shakeBlock) return
 
   const pan = detectPan()
-
-  // ── Not horizontal (top-to-bottom / diagonal) ─────────────────────────────
-  if(pan.notHorizontal){
-    // Always clear stall/fast timers — they're irrelevant while not horizontal
-    stallSince = null; fastSince = null
-    if(!notHorizSince) notHorizSince = now
-    if(now - notHorizSince > 600){
-      notHorizCount++
-      if(notHorizCount === 1){
-        // First offence — warn and reset zones
-        showBlock('↕️','Wrong Direction!',
-          'You must sweep LEFT → RIGHT only.\nDo NOT move the camera up or down.')
-        showToast('err','↕️','Not Left→Right!',
-          'Sweep horizontally LEFT → RIGHT only. Zones reset.')
-        zonesSeen=new Set(); updateZonePips()
-        scanStart=now
-        prevFrameData=null; motionBuf=[]
-        notHorizSince=null
-        wrongDirSince=null; wrongDirCount=0
-        return
-      }
-      if(notHorizCount >= 2){
-        stopAndFail(
-          'You did not sweep LEFT → RIGHT.\n' +
-          'The camera must move horizontally across the rack.\n' +
-          'Please record again from the beginning.'
-        )
-        return
-      }
-    }
-    showToast('err','↕️','Sweep Sideways!','Move camera LEFT → RIGHT — not up/down.')
-    return
-  } else {
-    if(notHorizSince) clearBlock()
-    notHorizSince = null
-  }
 
   // ── Wrong direction (panning LEFT instead of RIGHT) ───────────────────────
   if(pan.wrongDir){
@@ -1002,7 +960,6 @@ function processScan(now){
         scanStart=now
         prevFrameData=null; motionBuf=[]
         wrongDirSince=null
-        notHorizSince=null; notHorizCount=0
         return
       }
       if(wrongDirCount >= 2){
@@ -1033,12 +990,12 @@ function processScan(now){
   if(pan.tooSlow){
     if(!stallSince) stallSince=now
     if(now-stallSince>3500){
-      showBlock('🐢','Not Moving','Pan the camera slowly from LEFT to RIGHT.')
-      showToast('warn','🐢','Not Moving','Move camera left to right.')
+      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
+      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally left to right.')
       return
     }
     if(now-stallSince>1500){
-      showToast('warn','→','Keep Moving','Sweep slowly LEFT → RIGHT.')
+      showToast('warn','→','Sweep Left → Right','Move camera slowly LEFT → RIGHT.')
       return
     }
   } else { if(stallSince) clearBlock(); stallSince=null }
@@ -1046,7 +1003,7 @@ function processScan(now){
   clearBlock()
 
   // Advance zones only with valid rightward horizontal motion
-  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir && !pan.notHorizontal){
+  if(!pan.tooSlow && !pan.tooFast && !pan.wrongDir && !pan.){
     const elapsed = now - scanStart
     const earnedZone = Math.min(N_ZONES-1, Math.floor(elapsed / 1400))
     if(!zonesSeen.has(earnedZone)){
@@ -1075,7 +1032,7 @@ function processScan(now){
   scanStart = Date.now()
   prevFrameData = null; motionBuf = []
   wrongDirSince = null; wrongDirCount = 0
-  notHorizSince = null; notHorizCount = 0
+  
   fastSince = null; stallSince = null
   clearBlock()
   showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
