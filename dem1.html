@@ -36,7 +36,6 @@ canvas{
   z-index:1;
 }
 
-/* ── ROTATE HINT — full screen portrait overlay ── */
 #rotateHint{
   position:fixed;inset:0;z-index:50;
   display:none;
@@ -59,11 +58,7 @@ canvas{
   70% {transform:rotate(90deg);}
   100%{transform:rotate(0deg);}
 }
-.rh-title{
-  font-weight:800;font-size:22px;
-  letter-spacing:3px;text-transform:uppercase;
-  color:#ffcc00;
-}
+.rh-title{font-weight:800;font-size:22px;letter-spacing:3px;text-transform:uppercase;color:#ffcc00;}
 .rh-rows{display:flex;flex-direction:column;gap:8px;width:280px;}
 .rh-row{
   display:flex;align-items:center;gap:10px;
@@ -71,15 +66,8 @@ canvas{
   padding:8px 12px;
   font-family:'Share Tech Mono',monospace;font-size:12px;color:#bbb;
 }
-.rh-cd{
-  font-family:'Share Tech Mono',monospace;
-  font-size:14px;color:#666;letter-spacing:2px;margin-top:4px;
-}
+.rh-cd{font-family:'Share Tech Mono',monospace;font-size:14px;color:#666;letter-spacing:2px;margin-top:4px;}
 
-/* ══════════════════════════════════════════════
-   UI WRAPPER — rotates automatically after hint
-   Same confirmed formula from test file
-══════════════════════════════════════════════ */
 #ui{
   position:fixed;
   top:0;left:0;
@@ -96,49 +84,32 @@ canvas{
   height:100vw;
 }
 
-/* ── HEADER ── */
 .header{
-  position:absolute;
-  top:0;left:0;right:0;
-  z-index:10;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
+  position:absolute;top:0;left:0;right:0;z-index:10;
+  display:flex;align-items:center;justify-content:space-between;
   padding:14px 18px 20px;
   background:linear-gradient(180deg,rgba(0,0,0,0.85) 0%,transparent 100%);
   pointer-events:auto;
 }
-.logo{
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:800;font-size:20px;
-  letter-spacing:4px;text-transform:uppercase;color:#fff;
-}
+.logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;letter-spacing:4px;text-transform:uppercase;color:#fff;}
 .logo span{color:#00e5ff;}
 .rec-indicator{
   display:none;align-items:center;gap:6px;
-  font-family:'Share Tech Mono',monospace;
-  font-size:12px;letter-spacing:1px;color:#ff3b3b;
+  font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:1px;color:#ff3b3b;
 }
-.rec-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:#ff3b3b;animation:blink 1s infinite;
-}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
 .rec-indicator.show{display:flex;}
 
-/* ── STEP PILLS ── */
 .steps{
-  position:absolute;
-  top:58px;left:0;right:0;
-  z-index:10;
+  position:absolute;top:58px;left:0;right:0;z-index:10;
   display:flex;justify-content:center;gap:6px;padding:0 16px;
 }
 .step{
   flex:1;max-width:110px;
   display:flex;flex-direction:column;align-items:center;gap:3px;
   font-family:'Share Tech Mono',monospace;font-size:9px;
-  letter-spacing:0.5px;text-transform:uppercase;
-  color:#444;transition:all 0.4s;
+  letter-spacing:0.5px;text-transform:uppercase;color:#444;transition:all 0.4s;
 }
 .step-bar{width:100%;height:3px;background:#222;border-radius:2px;transition:all 0.4s;}
 .step.active .step-bar{background:#ffcc00;}
@@ -146,169 +117,95 @@ canvas{
 .step.done .step-bar{background:#00ff88;}
 .step.done{color:#00ff88;}
 
-/* ── ZONE PROGRESS ── */
-#zoneprogress{
-  position:absolute;
-  top:88px;left:50%;
-  transform:translateX(-50%);
-  display:none;gap:8px;
-}
+#zoneprogress{position:absolute;top:88px;left:50%;transform:translateX(-50%);display:none;gap:8px;}
 #zoneprogress.show{display:flex;}
 .zp{width:60px;height:5px;border-radius:3px;background:#222;transition:all 0.3s;}
 .zp.done{background:#00ff88;}
 
-/* ── FAILED OVERLAY ── */
 #failedOverlay{
-  position:absolute;inset:0;
-  z-index:25;
-  display:none;
+  position:absolute;inset:0;z-index:25;display:none;
   flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  background:rgba(0,0,0,0.92);backdrop-filter:blur(10px);
-  pointer-events:auto;
+  background:rgba(0,0,0,0.92);backdrop-filter:blur(10px);pointer-events:auto;
 }
 #failedOverlay.show{display:flex;}
 .fail-icon{font-size:60px;}
-.fail-title{
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:800;font-size:26px;
-  letter-spacing:2px;text-transform:uppercase;
-  color:#ff4444;text-align:center;
-}
-.fail-msg{
-  font-family:'Share Tech Mono',monospace;
-  font-size:13px;color:#ffcc00;
-  text-align:center;line-height:1.8;
-  max-width:80%;
-}
+.fail-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;letter-spacing:2px;text-transform:uppercase;color:#ff4444;text-align:center;}
+.fail-msg{font-family:'Share Tech Mono',monospace;font-size:13px;color:#ffcc00;text-align:center;line-height:1.8;max-width:80%;}
 .fail-btn{
   margin-top:8px;
   background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);
   color:#fff;border:none;border-radius:30px;
   padding:14px 32px;
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:700;font-size:18px;letter-spacing:2px;
-  cursor:pointer;
-  box-shadow:0 4px 20px rgba(255,0,0,0.35);
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:2px;
+  cursor:pointer;box-shadow:0 4px 20px rgba(255,0,0,0.35);
   -webkit-tap-highlight-color:transparent;
 }
 .fail-btn:active{transform:scale(0.95);}
 
-/* ── UNIT COUNTER ── */
 #unitLabel{
-  position:absolute;
-  top:96px;right:16px;
-  display:none;
-  flex-direction:column;align-items:flex-end;gap:1px;
+  position:absolute;top:96px;right:16px;
+  display:none;flex-direction:column;align-items:flex-end;gap:1px;
   font-family:'Share Tech Mono',monospace;font-size:10px;color:#555;text-transform:uppercase;
 }
 #unitLabel.show{display:flex;}
-#unitNum{
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:800;font-size:30px;color:#00e5ff;line-height:1;
-}
+#unitNum{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;color:#00e5ff;line-height:1;}
 
-/* ── BLOCKER ── */
 #blocker{
-  position:absolute;inset:0;
-  z-index:20;display:none;
+  position:absolute;inset:0;z-index:20;display:none;
   flex-direction:column;align-items:center;justify-content:center;gap:14px;
-  background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);
-  pointer-events:auto;
+  background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);pointer-events:auto;
 }
 #blocker.show{display:flex;}
 .blocker-icon{font-size:56px;animation:iconpulse 1.2s ease-in-out infinite;}
 @keyframes iconpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
-.blocker-title{
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:800;font-size:26px;
-  letter-spacing:2px;text-transform:uppercase;
-  color:#ff4444;text-align:center;
-}
-.blocker-sub{
-  font-family:'Share Tech Mono',monospace;
-  font-size:13px;color:#ffcc00;
-  text-align:center;line-height:1.75;max-width:80%;
-}
+.blocker-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;letter-spacing:2px;text-transform:uppercase;color:#ff4444;text-align:center;}
+.blocker-sub{font-family:'Share Tech Mono',monospace;font-size:13px;color:#ffcc00;text-align:center;line-height:1.75;max-width:80%;}
 
-/* ── TOAST ── */
-#toast{
-  position:absolute;
-  bottom:118px;left:50%;
-  transform:translateX(-50%);
-  width:88%;max-width:400px;
-  pointer-events:none;
-}
+#toast{position:absolute;bottom:118px;left:50%;transform:translateX(-50%);width:88%;max-width:400px;pointer-events:none;}
 .toast-inner{
   background:rgba(0,0,0,0.78);backdrop-filter:blur(6px);
   border-radius:8px;padding:11px 15px;
-  display:flex;align-items:flex-start;gap:10px;
-  border-left:3px solid #ffcc00;
+  display:flex;align-items:flex-start;gap:10px;border-left:3px solid #ffcc00;
 }
 .toast-inner.ok{border-left-color:#00ff88;}
 .toast-inner.err{border-left-color:#ff3b3b;}
 .toast-inner.info{border-left-color:#00e5ff;}
 .toast-icon{font-size:18px;line-height:1;flex-shrink:0;margin-top:1px;}
 .toast-text{flex:1;}
-.toast-label{
-  font-family:'Share Tech Mono',monospace;
-  font-size:9px;letter-spacing:1.5px;
-  text-transform:uppercase;opacity:0.6;margin-bottom:2px;
-}
-.toast-msg{
-  font-family:'Barlow Condensed',sans-serif;
-  font-weight:600;font-size:16px;line-height:1.3;color:#fff;
-}
+.toast-label{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;opacity:0.6;margin-bottom:2px;}
+.toast-msg{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;line-height:1.3;color:#fff;}
 
-/* ── CONTROLS ── */
 .controls{
-  position:absolute;
-  bottom:0;left:0;right:0;
+  position:absolute;bottom:0;left:0;right:0;
   display:flex;justify-content:center;align-items:center;gap:28px;
   padding:18px 0 24px;
-  background:linear-gradient(0deg,rgba(0,0,0,0.85),transparent);
-  pointer-events:auto;
+  background:linear-gradient(0deg,rgba(0,0,0,0.85),transparent);pointer-events:auto;
 }
 .btn{
   border:none;border-radius:50%;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:20px;
-  transition:transform 0.15s,opacity 0.2s;
-  -webkit-tap-highlight-color:transparent;
-  position:relative;
+  font-size:20px;transition:transform 0.15s,opacity 0.2s;
+  -webkit-tap-highlight-color:transparent;position:relative;
 }
 .btn:active{transform:scale(0.86);}
-.btn-flip{
-  width:52px;height:52px;
-  background:rgba(255,255,255,0.1);
-  border:1.5px solid rgba(255,255,255,0.18);color:#fff;
-}
-.btn-pause{
-  width:52px;height:52px;
-  background:rgba(255,255,255,0.1);
-  border:1.5px solid rgba(255,255,255,0.18);color:#fff;
-  opacity:0.35;pointer-events:none;
-}
+.btn-flip{width:52px;height:52px;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.18);color:#fff;}
+.btn-pause{width:52px;height:52px;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.18);color:#fff;opacity:0.35;pointer-events:none;}
 .btn-pause.enabled{opacity:1;pointer-events:auto;}
 .btn-record{
   width:74px;height:74px;font-size:24px;
   background:radial-gradient(circle at 38% 32%,#ff5555,#bb0000);
-  box-shadow:0 0 0 4px rgba(255,60,60,0.22),0 4px 22px rgba(255,0,0,0.35);
-  color:#fff;
+  box-shadow:0 0 0 4px rgba(255,60,60,0.22),0 4px 22px rgba(255,0,0,0.35);color:#fff;
 }
 .btn-record.recording{
   background:radial-gradient(circle at 38% 32%,#444,#1a1a1a);
-  box-shadow:0 0 0 4px rgba(255,255,255,0.08);
-  font-size:18px;
+  box-shadow:0 0 0 4px rgba(255,255,255,0.08);font-size:18px;
 }
 .btn-record.recording::after{
-  content:'';position:absolute;
-  width:74px;height:74px;border-radius:50%;
-  border:2px solid rgba(255,80,80,0.5);
-  animation:recring 1.6s ease-out infinite;
+  content:'';position:absolute;width:74px;height:74px;border-radius:50%;
+  border:2px solid rgba(255,80,80,0.5);animation:recring 1.6s ease-out infinite;
 }
 @keyframes recring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
 
-/* shake vignette */
 #shakeVig{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .2s;}
 </style>
 </head>
@@ -316,7 +213,6 @@ canvas{
 
 <div id="shakeVig"></div>
 
-<!-- Rotate hint: portrait, auto-dismissed after 3s -->
 <div id="rotateHint">
   <div class="rh-phone">→</div>
   <div class="rh-title">Now Scan Each Unit</div>
@@ -328,9 +224,7 @@ canvas{
   <div class="rh-cd" id="rhCd">Starting in 3…</div>
 </div>
 
-<!-- UI wrapper: auto-rotates 90° when scan starts -->
 <div id="ui">
-
   <div class="header">
     <div class="logo">Rack<span>Track</span></div>
     <div class="rec-indicator" id="recIndicator">
@@ -352,14 +246,12 @@ canvas{
 
   <div id="unitLabel">UNIT<div id="unitNum">1</div></div>
 
-  <!-- Blocker lives inside #ui so it rotates with everything else -->
   <div id="blocker">
     <div class="blocker-icon" id="blockerIcon">⚠️</div>
     <div class="blocker-title" id="blockerTitle">Hold On</div>
     <div class="blocker-sub" id="blockerSub">Follow instructions.</div>
   </div>
 
-  <!-- Failed overlay: shown when user moves without completing 100% -->
   <div id="failedOverlay">
     <div class="fail-icon">❌</div>
     <div class="fail-title">Capture Incomplete</div>
@@ -382,7 +274,6 @@ canvas{
     <button class="btn btn-record" id="recordBtn">●</button>
     <button class="btn btn-pause" id="pauseBtn">⏸</button>
   </div>
-
 </div>
 
 <video id="video" autoplay playsinline muted></video>
@@ -390,38 +281,38 @@ canvas{
 
 <script>
 // ── Elements ──────────────────────────────────────────────────────────────────
-const video       = document.getElementById('video')
-const canvas      = document.getElementById('canvas')
-const ctx         = canvas.getContext('2d', {willReadFrequently:true})
-const ui          = document.getElementById('ui')
-const rotateHint  = document.getElementById('rotateHint')
-const rhCd        = document.getElementById('rhCd')
-const recIndicator= document.getElementById('recIndicator')
-const zoneprogress= document.getElementById('zoneprogress')
-const unitLabel   = document.getElementById('unitLabel')
-const unitNum     = document.getElementById('unitNum')
-const toastInner  = document.getElementById('toastInner')
-const toastIcon   = document.getElementById('toastIcon')
-const toastLabel  = document.getElementById('toastLabel')
-const toastMsg    = document.getElementById('toastMsg')
-const blocker     = document.getElementById('blocker')
-const blockerIcon = document.getElementById('blockerIcon')
-const blockerTitle= document.getElementById('blockerTitle')
-const blockerSub  = document.getElementById('blockerSub')
+const video          = document.getElementById('video')
+const canvas         = document.getElementById('canvas')
+const ctx            = canvas.getContext('2d', {willReadFrequently:true})
+const ui             = document.getElementById('ui')
+const rotateHint     = document.getElementById('rotateHint')
+const rhCd           = document.getElementById('rhCd')
+const recIndicator   = document.getElementById('recIndicator')
+const zoneprogress   = document.getElementById('zoneprogress')
+const unitLabel      = document.getElementById('unitLabel')
+const unitNum        = document.getElementById('unitNum')
+const toastInner     = document.getElementById('toastInner')
+const toastIcon      = document.getElementById('toastIcon')
+const toastLabel     = document.getElementById('toastLabel')
+const toastMsg       = document.getElementById('toastMsg')
+const blocker        = document.getElementById('blocker')
+const blockerIcon    = document.getElementById('blockerIcon')
+const blockerTitle   = document.getElementById('blockerTitle')
+const blockerSub     = document.getElementById('blockerSub')
 const failedOverlay  = document.getElementById('failedOverlay')
 const failMsg        = document.getElementById('failMsg')
 const recordAgainBtn = document.getElementById('recordAgainBtn')
-const recordBtn   = document.getElementById('recordBtn')
-const pauseBtn    = document.getElementById('pauseBtn')
-const flipBtn     = document.getElementById('flipBtn')
-const shakeVig    = document.getElementById('shakeVig')
+const recordBtn      = document.getElementById('recordBtn')
+const pauseBtn       = document.getElementById('pauseBtn')
+const flipBtn        = document.getElementById('flipBtn')
+const shakeVig       = document.getElementById('shakeVig')
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let usingFront    = false
 let stream, recorder, chunks = []
 let recording     = false
 let paused        = false
-let phase         = 'idle'   // idle | rack | scan-prep | scan
+let phase         = 'idle'
 
 // Rack phase
 let rackPhaseStart = 0
@@ -429,30 +320,23 @@ let rackHoldStart  = null
 const RACK_HOLD_MS = 2500
 
 // Scan phase
-const N_ZONES      = 3
-let scanStart      = 0
-let horizAccum     = 0       // accumulated horizontal distance for zone tracking
-let prevFrameData  = null
-let motionBuf      = []
-const MOTION_BUF   = 6
-let zonesSeen      = new Set()
-let currentUnit    = 1
-
-// Scan direction enforcement
+const N_ZONES    = 3
+let horizAccum   = 0
+let zonesSeen    = new Set()
+let currentUnit  = 1
 let wrongDirSince  = null
-let wrongDirCount  = 0       // how many times user went wrong direction this unit
+let wrongDirCount  = 0
 let fastSince      = null
 let stallSince     = null
 let shakeBlock     = false
-let accelMag       = 0
 
-// Offscreen canvas for frame analysis (no flicker on visible canvas)
+// Offscreen canvas for frame analysis
 const offW = 160, offH = 120
 const off  = document.createElement('canvas')
 off.width  = offW; off.height = offH
 const offCtx = off.getContext('2d', {willReadFrequently:true})
 
-// ── Landscape UI ─────────────────────────────────────────────────────────────
+// ── Landscape UI ──────────────────────────────────────────────────────────────
 function setLandscape(on){
   if(on){
     ui.style.transformOrigin = 'top left'
@@ -482,7 +366,7 @@ function setupRecorder(){
   catch{ recorder = new MediaRecorder(stream) }
   recorder.ondataavailable = e=>{ if(e.data.size>0) chunks.push(e.data) }
   recorder.onstop = ()=>{
-    if(chunks.length === 0) return   // discarded (failed capture)
+    if(chunks.length === 0) return
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))
     a.download = 'racktrack.webm'; a.click()
@@ -491,7 +375,81 @@ function setupRecorder(){
 startCamera()
 flipBtn.onclick = ()=>{ usingFront=!usingFront; startCamera() }
 
-// ── Helpers to start / reset a recording session ──────────────────────────────
+// ── Gyroscope ────────────────────────────────────────────────────────────────
+let gyroAvailable = false
+let gyroGamma     = 0   // smoothed pan speed (deg/s)
+let gyroBeta      = 0   // smoothed tilt speed (deg/s)
+let accelMag      = 0   // raw acceleration magnitude for shake
+const GYRO_BUF    = 8   // larger buffer = smoother but slightly more lag
+const gyroBetaBuf  = []
+const gyroGammaBuf = []
+
+window.addEventListener('devicemotion', e => {
+  const r = e.rotationRate
+  if(!r || (r.beta === null && r.gamma === null)) return
+  gyroAvailable = true
+
+  // Smooth rotation rates
+  gyroBetaBuf.push(r.beta   || 0)
+  gyroGammaBuf.push(r.gamma || 0)
+  if(gyroBetaBuf.length  > GYRO_BUF) gyroBetaBuf.shift()
+  if(gyroGammaBuf.length > GYRO_BUF) gyroGammaBuf.shift()
+  gyroBeta  = gyroBetaBuf.reduce((a,b)=>a+b,0)  / gyroBetaBuf.length
+  gyroGamma = gyroGammaBuf.reduce((a,b)=>a+b,0) / gyroGammaBuf.length
+
+  // Acceleration magnitude for shake detection only
+  const a = e.accelerationIncludingGravity
+  if(a) accelMag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2)
+})
+
+// ── Pan state interpretation ──────────────────────────────────────────────────
+// TUNED thresholds — more forgiving, noise-resistant:
+//
+//  MIN_PAN:    8  → 12  — ignore tiny gyro noise when holding steady
+//  MAX_PAN:   80  → 90  — allow slightly faster sweeps
+//  WRONG_DIR_MIN: only flag if leftward motion is CLEARLY intentional (>20 deg/s)
+//               instead of the old MIN_PAN=8 which caught normal hand wobble
+//  TILT_RATIO: vertical-to-horizontal ratio must be > 1.4 before triggering
+//               "wrong direction" (previously fired at 0.8 — way too sensitive)
+//
+// SHAKE: accelMag uses Pythagorean magnitude (not sum) + threshold raised to 55
+//        → stops triggering on normal walking / minor bumps
+
+const MIN_PAN       = 12   // deg/s — minimum to register as intentional pan
+const MAX_PAN       = 90   // deg/s — too fast, blurry
+const WRONG_DIR_MIN = 22   // deg/s — leftward motion must exceed this to count as wrong direction
+const TILT_RATIO    = 1.5  // beta/gamma ratio above which it's "mostly vertical"
+const SHAKE_THRESH  = 55   // m/s² magnitude — only truly violent shaking
+
+function getPanState(){
+  const absPan   = Math.abs(gyroGamma)
+  const absTilt  = Math.abs(gyroBeta)
+
+  // Panning RIGHT: gamma is negative on most devices in landscape
+  // We accept EITHER sign for right to handle device variation:
+  //   if gyroGamma < -MIN_PAN  →  moving right (standard)
+  //   if gyroGamma >  MIN_PAN  →  also check if it's consistently positive (flipped device)
+  // The simplest robust approach: accumulate whichever direction earns zones.
+  // We treat NEGATIVE gamma as "right" (most common), positive gamma as "left" (wrong).
+  const panningRight   = gyroGamma < -MIN_PAN
+  const panningLeft    = gyroGamma >  WRONG_DIR_MIN   // must be clearly leftward
+
+  const tooFast        = absPan > MAX_PAN
+  const tooSlow        = absPan < MIN_PAN
+
+  // Only flag vertical if tilt is SIGNIFICANTLY dominant over horizontal pan
+  // and both exceed a minimum threshold (prevents triggering when holding still)
+  const notHorizontal  = absTilt > 18
+                      && absPan  > 10
+                      && (absTilt / Math.max(absPan, 1)) > TILT_RATIO
+
+  // Wrong direction: clearly panning left AND not mostly vertical noise
+  const wrongDir = panningLeft && !notHorizontal && absPan > WRONG_DIR_MIN
+
+  return { absPan, tooFast, tooSlow, panningRight, wrongDir, notHorizontal }
+}
+
+// ── Recording helpers ─────────────────────────────────────────────────────────
 function beginRecording(){
   chunks = []
   recorder.start(500)
@@ -503,7 +461,6 @@ function beginRecording(){
   recIndicator.classList.add('show')
   recIndicator.style.opacity = '1'
   recordBtn.classList.add('recording'); recordBtn.textContent = '■'
-  // Pause button available immediately during scan phase; hidden now
   pauseBtn.classList.remove('enabled')
   pauseBtn.textContent = '⏸'
   updateSteps()
@@ -511,68 +468,10 @@ function beginRecording(){
     'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
 }
 
-// ── Record button ─────────────────────────────────────────────────────────────
-recordBtn.onclick = ()=>{
-  if(!recording){
-    beginRecording()
-  } else {
-    // Manual stop — save whatever we have
-    if(recorder.state === 'paused') recorder.resume()
-    recorder.stop()
-    recording = false; phase = 'idle'
-    paused = false
-    setLandscape(false)
-    recIndicator.classList.remove('show')
-    recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
-    pauseBtn.classList.remove('enabled')
-    clearBlock()
-    failedOverlay.classList.remove('show')
-    zoneprogress.classList.remove('show')
-    unitLabel.classList.remove('show')
-    showToast('info','ℹ️','Saved','Recording saved. Press ● to start again.')
-    updateSteps()
-  }
-}
-
-// ── Pause button — available ANY TIME during scan phase ───────────────────────
-pauseBtn.onclick = ()=>{
-  if(!recording || phase !== 'scan') return
-  paused = !paused
-  if(paused){
-    if(recorder.state === 'recording') recorder.pause()
-    recIndicator.style.opacity = '0.35'
-    pauseBtn.textContent = '▶'
-    clearBlock()
-    showToast('warn','⏸','Paused','Move to the next unit row, then press ▶ to continue.')
-  } else {
-    if(recorder.state === 'paused') recorder.resume()
-    recIndicator.style.opacity = '1'
-    pauseBtn.textContent = '⏸'
-    // Reset scan state for the new unit row
-    zonesSeen = new Set(); horizAccum = 0
-    wrongDirSince = null; wrongDirCount = 0
-    
-    fastSince = null; stallSince = null
-    updateZonePips()
-    showToast('info','→','Scan Unit '+currentUnit,
-      'Sweep camera slowly LEFT → RIGHT.')
-  }
-}
-
-// ── "Record Again" on failed overlay ─────────────────────────────────────────
-recordAgainBtn.onclick = ()=>{
-  failedOverlay.classList.remove('show')
-  zoneprogress.classList.remove('show')
-  unitLabel.classList.remove('show')
-  clearBlock()
-  beginRecording()
-}
-
-// ── stopAndFail — kill recording and show error ───────────────────────────────
 function stopAndFail(msg){
   if(recorder.state === 'paused') recorder.resume()
   if(recorder.state !== 'inactive') recorder.stop()
-  chunks = []   // discard — onstop will skip download because chunks is empty
+  chunks = []
   recording = false; phase = 'idle'; paused = false
   recIndicator.classList.remove('show')
   recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
@@ -586,6 +485,59 @@ function stopAndFail(msg){
   updateSteps()
 }
 
+// ── Record button ─────────────────────────────────────────────────────────────
+recordBtn.onclick = ()=>{
+  if(!recording){
+    beginRecording()
+  } else {
+    if(recorder.state === 'paused') recorder.resume()
+    recorder.stop()
+    recording = false; phase = 'idle'; paused = false
+    setLandscape(false)
+    recIndicator.classList.remove('show')
+    recordBtn.classList.remove('recording'); recordBtn.textContent = '●'
+    pauseBtn.classList.remove('enabled')
+    clearBlock()
+    failedOverlay.classList.remove('show')
+    zoneprogress.classList.remove('show')
+    unitLabel.classList.remove('show')
+    showToast('info','ℹ️','Saved','Recording saved. Press ● to start again.')
+    updateSteps()
+  }
+}
+
+// ── Pause button ──────────────────────────────────────────────────────────────
+pauseBtn.onclick = ()=>{
+  if(!recording || phase !== 'scan') return
+  paused = !paused
+  if(paused){
+    if(recorder.state === 'recording') recorder.pause()
+    recIndicator.style.opacity = '0.35'
+    pauseBtn.textContent = '▶'
+    clearBlock()
+    showToast('warn','⏸','Paused','Move to the next unit row, then press ▶ to continue.')
+  } else {
+    if(recorder.state === 'paused') recorder.resume()
+    recIndicator.style.opacity = '1'
+    pauseBtn.textContent = '⏸'
+    zonesSeen = new Set(); horizAccum = 0
+    wrongDirSince = null; wrongDirCount = 0
+    fastSince = null; stallSince = null
+    updateZonePips()
+    showToast('info','→','Scan Unit '+currentUnit,
+      'Sweep camera slowly LEFT → RIGHT.')
+  }
+}
+
+// ── Record Again ──────────────────────────────────────────────────────────────
+recordAgainBtn.onclick = ()=>{
+  failedOverlay.classList.remove('show')
+  zoneprogress.classList.remove('show')
+  unitLabel.classList.remove('show')
+  clearBlock()
+  beginRecording()
+}
+
 // ── Toast / Blocker ───────────────────────────────────────────────────────────
 function showToast(type, ico, lbl, msg){
   toastInner.className = 'toast-inner '+(type==='ok'?'ok':type==='err'?'err':'info')
@@ -593,17 +545,17 @@ function showToast(type, ico, lbl, msg){
   toastLabel.textContent = lbl
   toastMsg.textContent = msg
 }
-let _blockActive = false
+let _blockTitle = ''
 function showBlock(ico, title, sub){
-  if(_blockActive && blockerTitle.textContent === title) return
-  _blockActive = true
+  if(_blockTitle === title) return
+  _blockTitle = title
   blockerIcon.textContent = ico
   blockerTitle.textContent = title
   blockerSub.textContent = sub
   blocker.classList.add('show')
 }
 function clearBlock(){
-  _blockActive = false
+  _blockTitle = ''
   blocker.classList.remove('show')
 }
 
@@ -620,168 +572,258 @@ function updateZonePips(){
     document.getElementById('zp'+z).className = 'zp'+(zonesSeen.has(z)?' done':'')
 }
 
-// ── Frame analysis (offscreen canvas — no flicker) ────────────────────────────
+// ── Frame analysis ────────────────────────────────────────────────────────────
 function grabOff(){
   offCtx.drawImage(video,0,0,offW,offH)
   return offCtx.getImageData(0,0,offW,offH)
 }
 
-// Rack frame validation — requires evidence the camera sees a FULL rack, not a close-up object.
-// A valid full-rack frame must satisfy ALL of:
-//   1. Brightness in [25, 215]   — not too dark, not overexposed/too-close
-//   2. Pixel variance > 400      — not a flat uniform surface (too close = low variance)
-//   3. Horizontal edge rows spread across ≥70% of frame HEIGHT — rack has rows top-to-bottom
-//   4. Vertical edge columns spread across ≥70% of frame WIDTH — rack spans left-to-right
-//   5. No single region dominates brightness (close objects fill the frame unevenly)
 function analyzeRackFrame(){
   const d = grabOff().data
   const lums = new Float32Array(offW * offH)
-
-  // Build luminance map
-  for(let y=0;y<offH;y++){
-    for(let x=0;x<offW;x++){
-      const i=(y*offW+x)*4
-      lums[y*offW+x] = d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
-    }
+  for(let y=0;y<offH;y++) for(let x=0;x<offW;x++){
+    const i=(y*offW+x)*4
+    lums[y*offW+x] = d[i]*.299 + d[i+1]*.587 + d[i+2]*.114
   }
-
-  // Mean brightness
   let sum=0
   for(let i=0;i<lums.length;i++) sum+=lums[i]
   const b = sum/lums.length
-
-  // Variance (detects close flat surfaces)
   let varSum=0
   for(let i=0;i<lums.length;i++) varSum+=(lums[i]-b)*(lums[i]-b)
   const variance = varSum/lums.length
 
-  // Horizontal edge presence per row (step 4px for speed)
-  // A row "has edges" if it has at least 3 significant horizontal transitions
   const rowHasEdge = new Uint8Array(offH)
   for(let y=0;y<offH;y++){
-    let edgeCount=0
-    for(let x=0;x<offW-4;x+=4){
-      if(Math.abs(lums[y*offW+x]-lums[y*offW+x+4])>20) edgeCount++
-    }
-    rowHasEdge[y] = edgeCount >= 3 ? 1 : 0
+    let ec=0
+    for(let x=0;x<offW-4;x+=4) if(Math.abs(lums[y*offW+x]-lums[y*offW+x+4])>20) ec++
+    rowHasEdge[y] = ec>=3?1:0
   }
-
-  // Vertical edge presence per column
   const colHasEdge = new Uint8Array(offW)
   for(let x=0;x<offW;x++){
-    let edgeCount=0
-    for(let y=0;y<offH-4;y+=4){
-      if(Math.abs(lums[y*offW+x]-lums[(y+4)*offW+x])>20) edgeCount++
-    }
-    colHasEdge[x] = edgeCount >= 3 ? 1 : 0
+    let ec=0
+    for(let y=0;y<offH-4;y+=4) if(Math.abs(lums[y*offW+x]-lums[(y+4)*offW+x])>20) ec++
+    colHasEdge[x] = ec>=3?1:0
   }
-
-  // Count how many rows/cols have edges
   let edgeRows=0, edgeCols=0
   for(let y=0;y<offH;y++) edgeRows+=rowHasEdge[y]
   for(let x=0;x<offW;x++) edgeCols+=colHasEdge[x]
+  const rowCoverage = edgeRows/offH
+  const colCoverage = edgeCols/offW
 
-  const rowCoverage = edgeRows/offH   // fraction of HEIGHT covered by edges
-  const colCoverage = edgeCols/offW   // fraction of WIDTH covered by edges
-
-  // Close-up objects tend to have edges only in the center region, not at the extremes.
-  // Check that edges exist in BOTH the top 25% AND bottom 25% of frame (top-to-bottom rack coverage)
-  let topEdge=0, botEdge=0
   const q = Math.floor(offH*0.25)
-  for(let y=0;y<q;y++)       topEdge+=rowHasEdge[y]
+  let topEdge=0, botEdge=0
+  for(let y=0;y<q;y++)         topEdge+=rowHasEdge[y]
   for(let y=offH-q;y<offH;y++) botEdge+=rowHasEdge[y]
-  const topCovered = topEdge/q > 0.35
-  const botCovered = botEdge/q > 0.35
-
-  // Same for left 25% and right 25%
-  let leftEdge=0, rightEdge=0
   const qc = Math.floor(offW*0.25)
+  let leftEdge=0, rightEdge=0
   for(let x=0;x<qc;x++)        leftEdge+=colHasEdge[x]
   for(let x=offW-qc;x<offW;x++) rightEdge+=colHasEdge[x]
-  const leftCovered  = leftEdge/qc   > 0.35
-  const rightCovered = rightEdge/qc  > 0.35
 
   const tooClose  = variance < 400 || b > 215
   const tooDark   = b < 25
-  // Rack must fill frame: edges spread across 60%+ of height AND width
-  //                       AND present in all four quadrant edges
   const noFullCoverage = rowCoverage < 0.60 || colCoverage < 0.60
-                      || !topCovered || !botCovered
-                      || !leftCovered || !rightCovered
+                      || topEdge/q  < 0.35 || botEdge/q   < 0.35
+                      || leftEdge/qc < 0.35 || rightEdge/qc < 0.35
 
-  const ok = !tooClose && !tooDark && !noFullCoverage
-
-  return { ok, brightness:b, tooClose, tooDark, noFullCoverage }
+  return { ok: !tooClose && !tooDark && !noFullCoverage, brightness:b, tooClose, tooDark, noFullCoverage }
 }
 
-// ── Gyroscope-based pan detection ────────────────────────────────────────────
-// Uses DeviceMotionEvent.rotationRate which gives deg/s on each axis.
-// When phone is held in landscape (rotated 90°):
-//   Alpha = rotation around Z (screen face) — not useful
-//   Beta  = rotation around X (tilt forward/back) — maps to UP/DOWN tilt
-//   Gamma = rotation around Y (tilt left/right)   — maps to LEFT/RIGHT pan
-//
-// We smooth with a small rolling buffer to avoid jitter noise.
+// ── Shake vignette ────────────────────────────────────────────────────────────
+function updateShakeVig(){
+  // accelMag is now Pythagorean, resting ~9.8 m/s² (gravity)
+  const excess = accelMag - 14   // above ~1.4g
+  if(excess > 0){
+    const a = Math.min(0.5, excess / 40)
+    shakeVig.style.background = `radial-gradient(ellipse at center,transparent 35%,rgba(255,40,40,${a}) 100%)`
+    shakeVig.style.opacity = '1'
+  } else {
+    shakeVig.style.opacity = '0'
+  }
+}
 
-let gyroAvailable  = false
-let gyroBeta       = 0   // deg/s: positive = tilting up, negative = down
-let gyroGamma      = 0   // deg/s: positive = panning right, negative = left
-const GYRO_BUF     = 5
-const gyroBetaBuf  = []
-const gyroGammaBuf = []
+// ── Phase: Rack ───────────────────────────────────────────────────────────────
+function processRack(now){
+  if(now - rackPhaseStart < 2000){
+    showToast('info','📐','Step 1 — Full Rack','Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
+    clearBlock(); return
+  }
+  const {ok, tooClose, tooDark, noFullCoverage} = analyzeRackFrame()
+  if(ok){
+    if(!rackHoldStart) rackHoldStart = now
+    const held = now - rackHoldStart
+    const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
+    showToast('ok','✅','Rack in Frame!', `Hold steady… ${pct}%`)
+    clearBlock()
+    if(held >= RACK_HOLD_MS) transitionToScan()
+  } else {
+    if(rackHoldStart !== null){
+      const reason = tooClose
+        ? 'You moved too close to the rack.\nStep back so the FULL rack fits in frame and record again.'
+        : 'You moved the camera before completing the capture.\nPlease record again from the beginning.'
+      stopAndFail(reason); return
+    }
+    rackHoldStart = null
+    if(tooDark){
+      showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
+      showToast('err','🌑','Too Dark','Move to a brighter area.')
+    } else if(tooClose){
+      showBlock('🔍','Too Close!','Step BACK — the whole rack must fit in the frame.')
+      showToast('err','🔍','Too Close','Step back until the full rack is visible.')
+    } else if(noFullCoverage){
+      showBlock('📐','Show Full Rack','The ENTIRE rack must fill the frame top-to-bottom and left-to-right.\nStep back further.')
+      showToast('warn','📐','Not Full Rack','Step back — fit the WHOLE rack from top to bottom shelf in frame.')
+    } else {
+      showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits top-to-bottom in frame.')
+      showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')
+    }
+  }
+}
 
-window.addEventListener('devicemotion', e => {
-  const r = e.rotationRate
-  if(!r || (r.beta === null && r.gamma === null)) return
-  gyroAvailable = true
+// ── Transition to scan ────────────────────────────────────────────────────────
+function transitionToScan(){
+  if(phase==='scan-prep') return
+  phase='scan-prep'; clearBlock(); updateSteps()
+  rotateHint.classList.add('show')
+  let count=3; rhCd.textContent='Starting in 3…'
+  const tick=setInterval(()=>{
+    count--
+    if(count>0){ rhCd.textContent=`Starting in ${count}…` }
+    else{
+      clearInterval(tick)
+      rotateHint.classList.remove('show')
+      recIndicator.style.opacity = '1'
+      setLandscape(true)
+      phase='scan'
+      zonesSeen=new Set(); horizAccum=0; currentUnit=1
+      wrongDirSince=null; wrongDirCount=0
+      fastSince=null; stallSince=null
+      zoneprogress.classList.add('show')
+      unitLabel.classList.add('show')
+      unitNum.textContent='1'
+      pauseBtn.textContent='⏸'
+      pauseBtn.classList.add('enabled')
+      updateSteps(); updateZonePips()
+      showToast('info','→','Scan Unit 1','Hold phone sideways. Sweep camera LEFT → RIGHT.')
+    }
+  },1000)
+}
 
-  // Push into smoothing buffers
-  gyroBetaBuf.push(r.beta  || 0)
-  gyroGammaBuf.push(r.gamma || 0)
-  if(gyroBetaBuf.length  > GYRO_BUF) gyroBetaBuf.shift()
-  if(gyroGammaBuf.length > GYRO_BUF) gyroGammaBuf.shift()
+// ── Phase: Scan ───────────────────────────────────────────────────────────────
+function processScan(now){
+  if(paused) return
 
-  gyroBeta  = gyroBetaBuf.reduce((a,b)=>a+b,0)  / gyroBetaBuf.length
-  gyroGamma = gyroGammaBuf.reduce((a,b)=>a+b,0) / gyroGammaBuf.length
+  if(!gyroAvailable){
+    showToast('warn','📡','Sensor Unavailable','Motion sensor not detected. Sweep left → right manually.')
+    return
+  }
 
-  // Also track raw accel magnitude for shake detection
-  const a = e.accelerationIncludingGravity
-  if(a) accelMag = Math.abs(a.x)+Math.abs(a.y)+Math.abs(a.z)
-})
+  // ── Shake check — only truly violent shaking blocks ──────────────────────
+  // accelMag at rest ≈ 9.8 (gravity). Threshold 55 = ~5.6g equivalent.
+  if(accelMag > SHAKE_THRESH){
+    shakeBlock = true
+    showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
+    showToast('err','🤚','Shaking!','Hold camera steady.')
+    return
+  }
+  // Hysteresis: clear shake block when motion settles
+  if(shakeBlock && accelMag < 30){ shakeBlock = false; clearBlock() }
+  if(shakeBlock) return
 
-// Returns pan state based purely on gyro rotation rates.
-// In landscape mode the phone is rotated 90° so axes swap:
-//   Panning left→right = gamma rotation  (absolute value = pan speed)
-//   Tilting up→down    = beta  rotation
-//
-// Thresholds (deg/s):
-//   MIN_PAN  = minimum gamma to count as intentional pan (not just holding steady)
-//   MAX_PAN  = too fast — blurry scan
-//   MAX_TILT = maximum allowed beta — if tilt exceeds this while panning, it's not horizontal
+  const pan = getPanState()
 
-const MIN_PAN  = 8    // deg/s minimum to register as panning
-const MAX_PAN  = 80   // deg/s too fast
-const MAX_TILT = 20   // deg/s — if beta exceeds this the motion is mostly vertical
+  // ── Vertical / diagonal motion ────────────────────────────────────────────
+  // Must be clearly tilting AND tilt-to-pan ratio is high (not just pan noise)
+  if(pan.notHorizontal){
+    stallSince = null; fastSince = null; wrongDirSince = null
+    showBlock('↕️','Pan Sideways!','Move camera LEFT → RIGHT only — not up or down.')
+    showToast('err','↕️','Go Sideways!','Sweep LEFT → RIGHT — not up/down.')
+    // Don't reset zones here — brief vertical bumps shouldn't erase progress
+    return
+  }
 
-function getPanState(){
-  const panSpeed  = gyroGamma   // negative = panning right in landscape (camera moves right)
-  const tiltSpeed = gyroBeta
+  // ── Wrong direction — must be clearly and intentionally leftward ──────────
+  if(pan.wrongDir){
+    stallSince = null; fastSince = null
+    if(!wrongDirSince) wrongDirSince = now
+    // Require 600ms of sustained wrong-direction before reacting (filters brief reversals)
+    if(now - wrongDirSince > 600){
+      wrongDirCount++
+      if(wrongDirCount === 1){
+        showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
+        showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
+        zonesSeen = new Set(); horizAccum = 0; updateZonePips()
+        wrongDirSince = null
+        return
+      }
+      if(wrongDirCount >= 2){
+        stopAndFail('You swept the wrong direction twice.\nScan must go LEFT → RIGHT.\nPlease record again from the beginning.')
+        return
+      }
+    }
+    return
+  } else {
+    if(wrongDirSince) clearBlock()
+    wrongDirSince = null
+  }
 
-  const absPan  = Math.abs(panSpeed)
-  const absTilt = Math.abs(tiltSpeed)
+  // ── Too fast ──────────────────────────────────────────────────────────────
+  if(pan.tooFast){
+    if(!fastSince) fastSince = now
+    if(now - fastSince > 500){
+      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
+      showToast('err','🐇','Too Fast','Slow down your pan speed.')
+    }
+    return
+  } else {
+    if(fastSince){ clearBlock() }
+    fastSince = null
+  }
 
-  // Panning RIGHT: in landscape gamma is negative when panning right
-  // (depends on device orientation — we detect the sign during first valid pan)
-  const movingRight = panSpeed < -MIN_PAN
-  const movingLeft  = panSpeed > MIN_PAN
+  // ── Not moving / stalled ──────────────────────────────────────────────────
+  // Only show stall warning after 5 seconds (was 4s) — avoid false positives
+  // on brief natural pauses during a sweep
+  if(pan.tooSlow){
+    if(!stallSince) stallSince = now
+    if(now - stallSince > 5000){
+      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
+      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally LEFT → RIGHT.')
+    }
+    // Don't return early — if zones have been earned already, preserve them
+    return
+  } else {
+    if(stallSince){ clearBlock() }
+    stallSince = null
+  }
 
-  const tooFast      = absPan > MAX_PAN
-  const tooSlow      = absPan < MIN_PAN
-  const wrongDir     = movingLeft && absPan > MIN_PAN
-  // notHorizontal: significant tilt compared to pan, or pure tilt with no pan
-  const notHorizontal = absTilt > MAX_TILT && absTilt > absPan * 0.8
+  // ── Valid right-pan: accumulate and advance zones ─────────────────────────
+  clearBlock()
 
-  return { panSpeed, tiltSpeed, absPan, tooFast, tooSlow, wrongDir, notHorizontal }
+  // Only accumulate when panning right — pausing in middle is fine, no zone loss
+  if(pan.panningRight){
+    horizAccum += pan.absPan
+  }
+
+  // Zone thresholds — spread across a comfortable sweep distance
+  // ZONE_DIST = total accumulated deg/s to earn all 3 zones
+  const ZONE_DIST  = 100   // reduced from 120 — less sweep needed per unit
+  const zoneStep   = ZONE_DIST / N_ZONES
+  const earnedZone = Math.min(N_ZONES - 1, Math.floor(horizAccum / zoneStep))
+  if(horizAccum > 0 && !zonesSeen.has(earnedZone)){
+    zonesSeen.add(earnedZone)
+    updateZonePips()
+  }
+
+  if(zonesSeen.size < N_ZONES) return
+
+  // ── All 3 zones covered — unit complete ──────────────────────────────────
+  currentUnit++
+  unitNum.textContent = currentUnit
+  zonesSeen = new Set(); horizAccum = 0; updateZonePips()
+  wrongDirSince = null; wrongDirCount = 0
+  fastSince = null; stallSince = null
+  clearBlock()
+  showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
+    'Keep going OR press ⏸ to move to the next unit row.')
 }
 
 // ── Canvas drawing ────────────────────────────────────────────────────────────
@@ -789,7 +831,7 @@ function drawRackGuide(){
   const W=canvas.width, H=canvas.height, t=Date.now()/1000
   const bw=W*.88, bh=H*.86, bx=(W-bw)/2, by=(H-bh)/2
   ctx.save()
-  ctx.strokeStyle = `rgba(255,204,0,${.5+Math.sin(t*2.5)*.2})`
+  ctx.strokeStyle=`rgba(255,204,0,${.5+Math.sin(t*2.5)*.2})`
   ctx.lineWidth=2; ctx.setLineDash([14,7]); ctx.lineDashOffset=-(t*25)%21
   ctx.strokeRect(bx,by,bw,bh); ctx.setLineDash([])
   ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2.5
@@ -814,210 +856,8 @@ function drawScanArrow(){
   ctx.restore()
 }
 
-function updateShakeVig(){
-  if(accelMag>25){
-    const a=Math.min(.5,(accelMag-25)/55)
-    shakeVig.style.background=`radial-gradient(ellipse at center,transparent 35%,rgba(255,40,40,${a}) 100%)`
-    shakeVig.style.opacity='1'
-  } else { shakeVig.style.opacity='0' }
-}
-
-// ── Phase: Rack ───────────────────────────────────────────────────────────────
-function processRack(now){
-  // Grace period at start — don't analyse immediately
-  if(now-rackPhaseStart<2000){
-    showToast('info','📐','Step 1 — Full Rack',
-      'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
-    clearBlock(); return
-  }
-
-  const {ok, brightness, tooClose, tooDark, noFullCoverage} = analyzeRackFrame()
-
-  if(ok){
-    if(!rackHoldStart) rackHoldStart = now
-    const held = now - rackHoldStart
-    const pct  = Math.round(Math.min(100, held / RACK_HOLD_MS * 100))
-    showToast('ok','✅','Rack in Frame!', `Hold steady… ${pct}%`)
-    clearBlock()
-    if(held >= RACK_HOLD_MS) transitionToScan()
-  } else {
-    if(rackHoldStart !== null){
-      // Frame went bad AFTER hold started — immediate fail
-      const reason = tooClose
-        ? 'You moved too close to the rack.\nStep back so the FULL rack fits in frame and record again.'
-        : 'You moved the camera before completing the capture.\nPlease record again from the beginning.'
-      stopAndFail(reason)
-      return
-    }
-    // Hold not yet started — guide the user
-    rackHoldStart = null
-    if(tooDark){
-      showBlock('🌑','Too Dark','Improve lighting so the rack is clearly visible.')
-      showToast('err','🌑','Too Dark','Move to a brighter area.')
-    } else if(tooClose){
-      showBlock('🔍','Too Close!','Step BACK — the whole rack must fit in the frame.')
-      showToast('err','🔍','Too Close','Step back until the full rack is visible.')
-    } else if(noFullCoverage){
-      showBlock('📐','Show Full Rack',
-        'The ENTIRE rack must fill the frame top-to-bottom and left-to-right.\nStep back further.')
-      showToast('warn','📐','Not Full Rack',
-        'Step back — fit the WHOLE rack from top shelf to bottom shelf in frame.')
-    } else {
-      showBlock('📐','Show Full Rack','Step back until the ENTIRE rack fits top-to-bottom in frame.')
-      showToast('warn','📐','Step 1 — Full Rack','Move back — fit the whole rack in frame.')
-    }
-  }
-}
-
-// ── Transition to scan phase ──────────────────────────────────────────────────
-function transitionToScan(){
-  if(phase==='scan-prep') return
-  phase='scan-prep'; clearBlock(); updateSteps()
-  rotateHint.classList.add('show')
-  let count=3; rhCd.textContent='Starting in 3…'
-  const tick=setInterval(()=>{
-    count--
-    if(count>0){ rhCd.textContent=`Starting in ${count}…` }
-    else{
-      clearInterval(tick)
-      rotateHint.classList.remove('show')
-      recIndicator.style.opacity = '1'
-      setLandscape(true)
-      phase='scan'
-      zonesSeen=new Set(); horizAccum=0; currentUnit=1
-      wrongDirSince=null; wrongDirCount=0
-      fastSince=null; stallSince=null
-      zoneprogress.classList.add('show')
-      unitLabel.classList.add('show')
-      unitNum.textContent='1'
-      // ── Pause button enabled immediately in scan phase ──
-      pauseBtn.textContent='⏸'
-      pauseBtn.classList.add('enabled')
-      updateSteps(); updateZonePips()
-      showToast('info','→','Scan Unit 1',
-        'Hold phone sideways. Sweep camera LEFT → RIGHT.')
-    }
-  },1000)
-}
-
-// ── Phase: Scan ───────────────────────────────────────────────────────────────
-function processScan(now){
-  if(paused) return
-
-  // If gyro not available, show one-time warning
-  if(!gyroAvailable){
-    showToast('warn','📡','Sensor Unavailable',
-      'Motion sensor not detected. Sweep left → right manually.')
-  }
-
-  // Shake guard
-  if(accelMag > 32){
-    shakeBlock = true
-    showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
-    showToast('err','🤚','Shaking!','Hold camera steady.')
-    return
-  }
-  if(shakeBlock && accelMag < 20){ shakeBlock = false; clearBlock() }
-  if(shakeBlock) return
-
-  const pan = getPanState()
-
-  // ── Not horizontal (top-to-bottom / diagonal tilt) ────────────────────────
-  if(pan.notHorizontal){
-    stallSince = null; fastSince = null; wrongDirSince = null
-    if(!stallSince) {}  // clear any stall
-    showBlock('↕️','Wrong Direction!',
-      'You are moving UP or DOWN.\nSweep the camera LEFT → RIGHT only.')
-    showToast('err','↕️','Not Left → Right!',
-      'Pan the camera sideways LEFT → RIGHT — not up or down.')
-    zonesSeen = new Set(); horizAccum = 0; updateZonePips()
-    return
-  }
-
-  // ── Wrong direction: panning left ─────────────────────────────────────────
-  if(pan.wrongDir){
-    stallSince = null; fastSince = null
-    if(!wrongDirSince) wrongDirSince = now
-    if(now - wrongDirSince > 400){
-      wrongDirCount++
-      if(wrongDirCount === 1){
-        showBlock('⬅️','Wrong Direction!',
-          'Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
-        showToast('err','⬅️','Wrong Direction!',
-          'Sweep LEFT → RIGHT only. Zones reset.')
-        zonesSeen = new Set(); horizAccum = 0; updateZonePips()
-        wrongDirSince = null
-        return
-      }
-      if(wrongDirCount >= 2){
-        stopAndFail(
-          'You swept the wrong direction twice.\n' +
-          'Scan must go LEFT → RIGHT.\n' +
-          'Please record again from the beginning.'
-        )
-        return
-      }
-    }
-    return
-  } else {
-    if(wrongDirSince) clearBlock()
-    wrongDirSince = null
-  }
-
-  // ── Too fast ──────────────────────────────────────────────────────────────
-  if(pan.tooFast){
-    if(!fastSince) fastSince = now
-    if(now - fastSince > 400){
-      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
-      showToast('err','🐇','Too Fast','Slow down your pan speed.')
-    }
-    return
-  } else { if(fastSince) clearBlock(); fastSince = null }
-
-  // ── Not moving / too slow ─────────────────────────────────────────────────
-  if(pan.tooSlow){
-    if(!stallSince) stallSince = now
-    if(now - stallSince > 4000){
-      showBlock('→','Sweep Left to Right',
-        'Move the camera slowly from LEFT to RIGHT across the rack.')
-      showToast('warn','→','Sweep Left → Right',
-        'Pan the camera horizontally LEFT → RIGHT.')
-      return
-    }
-    // silent for first 4s — don't interrupt if user just paused briefly
-    return
-  } else { if(stallSince) clearBlock(); stallSince = null }
-
-  // ── Valid left→right pan — accumulate distance and advance zones ──────────
-  clearBlock()
-  horizAccum += pan.absPan
-  const ZONE_DIST = 120   // deg/s accumulated to fill all 3 zones (tuned for real sweep)
-  const earnedZone = Math.min(N_ZONES - 1, Math.floor(horizAccum / (ZONE_DIST / N_ZONES)))
-  if(!zonesSeen.has(earnedZone)){
-    zonesSeen.add(earnedZone)
-    updateZonePips()
-  }
-
-  const covered  = zonesSeen.size
-  const allDone  = covered >= N_ZONES
-  if(!allDone) return   // silent during correct sweep
-
-  // All zones done — unit complete
-  currentUnit++
-  unitNum.textContent = currentUnit
-  zonesSeen = new Set(); horizAccum = 0; updateZonePips()
-  wrongDirSince = null; wrongDirCount = 0
-  fastSince = null; stallSince = null
-  clearBlock()
-  showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
-    'Keep going OR press ⏸ to move to the next unit row.')
-}
-
 // ── Canvas sync ───────────────────────────────────────────────────────────────
-function syncCanvas(){
-  canvas.width=window.innerWidth
-  canvas.height=window.innerHeight
-}
+function syncCanvas(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight }
 syncCanvas()
 window.addEventListener('resize', syncCanvas)
 
