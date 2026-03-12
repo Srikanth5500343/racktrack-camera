@@ -101,9 +101,24 @@ canvas{
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
 .rec-indicator.show{display:flex;}
 
+.steps{
+  position:absolute;top:58px;left:0;right:0;z-index:10;
+  display:flex;justify-content:center;gap:6px;padding:0 16px;
+}
+.step{
+  flex:1;max-width:110px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-family:'Share Tech Mono',monospace;font-size:9px;
+  letter-spacing:0.5px;text-transform:uppercase;color:#444;transition:all 0.4s;
+}
+.step-bar{width:100%;height:3px;background:#222;border-radius:2px;transition:all 0.4s;}
+.step.active .step-bar{background:#ffcc00;}
+.step.active{color:#ffcc00;}
+.step.done .step-bar{background:#00ff88;}
+.step.done{color:#00ff88;}
+
 #zoneprogress{position:absolute;top:88px;left:50%;transform:translateX(-50%);display:none;gap:8px;align-items:center;}
 #zoneprogress.show{display:flex;}
-/* Each pip is a timed fill bar */
 .zp{
   width:64px;height:7px;border-radius:4px;
   background:#1a1a1a;border:1px solid #333;
@@ -227,6 +242,12 @@ canvas{
     </div>
   </div>
 
+  <div class="steps">
+    <div class="step" id="step1"><div class="step-bar"></div><span>Full Rack</span></div>
+    <div class="step" id="step2"><div class="step-bar"></div><span>Unit Scan</span></div>
+    <div class="step" id="step3"><div class="step-bar"></div><span>Complete</span></div>
+  </div>
+
   <div id="zoneprogress">
     <div class="zp" id="zp0"><div class="zp-fill" id="zpf0"></div></div>
     <div class="zp" id="zp1"><div class="zp-fill" id="zpf1"></div></div>
@@ -309,25 +330,23 @@ let rackHoldStart  = null
 const RACK_HOLD_MS = 2500
 
 // Scan phase — TIME-BASED zone system
-// Each of the 3 zones requires ZONE_MS ms of VALID rightward panning.
-// Zones are sequential: zone 0 must complete before zone 1 starts.
-// Panning too fast = timer FREEZES (speed cannot substitute for time).
-// Hard floor: unit cannot complete in under MIN_UNIT_MS total wall-clock time.
-const N_ZONES        = 3
-const ZONE_MS        = 1100   // ms of valid pan needed per zone → 3.3s minimum
-const MAX_ZONE_SPEED = 55     // deg/s above this, zone timer does NOT tick
-const MIN_UNIT_MS    = 3000   // hard floor: unit can NEVER finish in under 3s
+const N_ZONES    = 3
+const ZONE_MS    = 1100   // ms per zone → ~3.3s total for all 3
 let zoneTime     = [0, 0, 0]
 let currentZone  = 0
 let zonesDone    = 0
-let lastPanTs       = null
-let unitStartTs     = null   // wall-clock when current unit scan began (for hard floor)
-let unitScanStartTs = null   // wall-clock when user started scanning this unit (for suggestion)
+let lastPanTs    = null
 let currentUnit  = 1
 let wrongDirSince  = null
+let wrongDirCount  = 0
 let fastSince      = null
 let stallSince     = null
 let shakeBlock     = false
+
+// ── NEW: timestamp when the current unit scan started (for speed suggestion) ─
+// Set when scan phase begins and reset each time the user resumes after a pause.
+// Used ONLY for informational toast — never blocks or stops recording.
+let unitScanStartTs = null
 
 // Offscreen canvas for frame analysis
 const offW = 160, offH = 120
@@ -376,10 +395,10 @@ flipBtn.onclick = ()=>{ usingFront=!usingFront; startCamera() }
 
 // ── Gyroscope ────────────────────────────────────────────────────────────────
 let gyroAvailable = false
-let gyroGamma     = 0   // smoothed pan speed (deg/s)
-let gyroBeta      = 0   // smoothed tilt speed (deg/s)
-let accelMag      = 0   // raw acceleration magnitude for shake
-const GYRO_BUF    = 8   // larger buffer = smoother but slightly more lag
+let gyroGamma     = 0
+let gyroBeta      = 0
+let accelMag      = 0
+const GYRO_BUF    = 8
 const gyroBetaBuf  = []
 const gyroGammaBuf = []
 
@@ -387,64 +406,32 @@ window.addEventListener('devicemotion', e => {
   const r = e.rotationRate
   if(!r || (r.beta === null && r.gamma === null)) return
   gyroAvailable = true
-
-  // Smooth rotation rates
   gyroBetaBuf.push(r.beta   || 0)
   gyroGammaBuf.push(r.gamma || 0)
   if(gyroBetaBuf.length  > GYRO_BUF) gyroBetaBuf.shift()
   if(gyroGammaBuf.length > GYRO_BUF) gyroGammaBuf.shift()
   gyroBeta  = gyroBetaBuf.reduce((a,b)=>a+b,0)  / gyroBetaBuf.length
   gyroGamma = gyroGammaBuf.reduce((a,b)=>a+b,0) / gyroGammaBuf.length
-
-  // Acceleration magnitude for shake detection only
   const a = e.accelerationIncludingGravity
   if(a) accelMag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2)
 })
 
-// ── Pan state interpretation ──────────────────────────────────────────────────
-// TUNED thresholds — more forgiving, noise-resistant:
-//
-//  MIN_PAN:    8  → 12  — ignore tiny gyro noise when holding steady
-//  MAX_PAN:   80  → 90  — allow slightly faster sweeps
-//  WRONG_DIR_MIN: only flag if leftward motion is CLEARLY intentional (>20 deg/s)
-//               instead of the old MIN_PAN=8 which caught normal hand wobble
-//  TILT_RATIO: vertical-to-horizontal ratio must be > 1.4 before triggering
-//               "wrong direction" (previously fired at 0.8 — way too sensitive)
-//
-// SHAKE: accelMag uses Pythagorean magnitude (not sum) + threshold raised to 55
-//        → stops triggering on normal walking / minor bumps
-
-const MIN_PAN       = 12   // deg/s — minimum to register as intentional pan
-const MAX_PAN       = 90   // deg/s — too fast, blurry
-const WRONG_DIR_MIN = 22   // deg/s — leftward motion must exceed this to count as wrong direction
-const TILT_RATIO    = 1.5  // beta/gamma ratio above which it's "mostly vertical"
-const SHAKE_THRESH  = 55   // m/s² magnitude — only truly violent shaking
+// ── Pan state ─────────────────────────────────────────────────────────────────
+const MIN_PAN       = 12
+const MAX_PAN       = 90
+const WRONG_DIR_MIN = 22
+const TILT_RATIO    = 1.5
+const SHAKE_THRESH  = 55
 
 function getPanState(){
   const absPan   = Math.abs(gyroGamma)
   const absTilt  = Math.abs(gyroBeta)
-
-  // Panning RIGHT: gamma is negative on most devices in landscape
-  // We accept EITHER sign for right to handle device variation:
-  //   if gyroGamma < -MIN_PAN  →  moving right (standard)
-  //   if gyroGamma >  MIN_PAN  →  also check if it's consistently positive (flipped device)
-  // The simplest robust approach: accumulate whichever direction earns zones.
-  // We treat NEGATIVE gamma as "right" (most common), positive gamma as "left" (wrong).
   const panningRight   = gyroGamma < -MIN_PAN
-  const panningLeft    = gyroGamma >  WRONG_DIR_MIN   // must be clearly leftward
-
+  const panningLeft    = gyroGamma >  WRONG_DIR_MIN
   const tooFast        = absPan > MAX_PAN
   const tooSlow        = absPan < MIN_PAN
-
-  // Only flag vertical if tilt is SIGNIFICANTLY dominant over horizontal pan
-  // and both exceed a minimum threshold (prevents triggering when holding still)
-  const notHorizontal  = absTilt > 18
-                      && absPan  > 10
-                      && (absTilt / Math.max(absPan, 1)) > TILT_RATIO
-
-  // Wrong direction: clearly panning left AND not mostly vertical noise
+  const notHorizontal  = absTilt > 18 && absPan > 10 && (absTilt / Math.max(absPan, 1)) > TILT_RATIO
   const wrongDir = panningLeft && !notHorizontal && absPan > WRONG_DIR_MIN
-
   return { absPan, tooFast, tooSlow, panningRight, wrongDir, notHorizontal }
 }
 
@@ -462,6 +449,7 @@ function beginRecording(){
   recordBtn.classList.add('recording'); recordBtn.textContent = '■'
   pauseBtn.classList.remove('enabled')
   pauseBtn.textContent = '⏸'
+  updateSteps()
   showToast('info','📐','Step 1 — Full Rack',
     'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
 }
@@ -480,6 +468,7 @@ function stopAndFail(msg){
   unitLabel.classList.remove('show')
   failMsg.textContent = msg
   failedOverlay.classList.add('show')
+  updateSteps()
 }
 
 // ── Record button ─────────────────────────────────────────────────────────────
@@ -499,6 +488,7 @@ recordBtn.onclick = ()=>{
     zoneprogress.classList.remove('show')
     unitLabel.classList.remove('show')
     showToast('info','ℹ️','Saved','Recording saved. Press ● to start again.')
+    updateSteps()
   }
 }
 
@@ -511,22 +501,35 @@ pauseBtn.onclick = ()=>{
     recIndicator.style.opacity = '0.35'
     pauseBtn.textContent = '▶'
     clearBlock()
-    // Check how long this unit was scanned before pausing
-    const pausedDuration = unitScanStartTs ? (Date.now() - unitScanStartTs) : null
-    if(pausedDuration !== null && pausedDuration < 3000){
-      showToast('warn','⏱','Too Fast!',
-        'Unit scanned in only '+(pausedDuration/1000).toFixed(1)+'s.\nTake 3–4 seconds per unit. Move to next row and sweep slower.')
+
+    // ── Speed suggestion on pause ─────────────────────────────────────────
+    // Measure wall-clock time since this unit's scan started.
+    // If under 3s → show a friendly suggestion. Never blocks or stops.
+    if(unitScanStartTs !== null){
+      const elapsed = Date.now() - unitScanStartTs
+      if(elapsed < 3000){
+        const secs = (elapsed / 1000).toFixed(1)
+        showToast('warn','⏱','Too Quick — ' + secs + 's',
+          'Unit ' + currentUnit + ' captured in only ' + secs + 's.\nTry sweeping slower — aim for 3–4 seconds per unit.')
+      } else {
+        showToast('warn','⏸','Paused',
+          'Move to the next unit row, then press ▶ to continue.')
+      }
     } else {
-      showToast('warn','⏸','Paused','Move to the next unit row, then press ▶ to continue.')
+      showToast('warn','⏸','Paused',
+        'Move to the next unit row, then press ▶ to continue.')
     }
+
   } else {
     if(recorder.state === 'paused') recorder.resume()
     recIndicator.style.opacity = '1'
     pauseBtn.textContent = '⏸'
     // Reset scan state for the new unit row
-    resetScanState()
-    unitScanStartTs = Date.now()   // start timing from when user resumes
+    zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
+    wrongDirSince=null; wrongDirCount=0
+    fastSince=null; stallSince=null
     updateZonePips()
+    unitScanStartTs = Date.now()   // ← start timing the new unit from resume
     showToast('info','→','Scan Unit '+currentUnit,
       'Sweep camera slowly LEFT → RIGHT.')
   }
@@ -562,15 +565,13 @@ function clearBlock(){
   blocker.classList.remove('show')
 }
 
-function resetScanState(){
-  zoneTime        = [0, 0, 0]
-  currentZone     = 0
-  zonesDone       = 0
-  lastPanTs       = null
-  unitStartTs     = null
-  unitScanStartTs = null
-  wrongDirSince   = null
-  fastSince = null; stallSince = null
+function updateSteps(){
+  const map = {idle:-1, rack:0, 'scan-prep':1, scan:1, done:2}
+  const cur = map[phase] ?? -1
+  for(let i=0;i<3;i++){
+    const el = document.getElementById('step'+(i+1))
+    el.className = 'step'+(i<cur?' done':i===cur?' active':'')
+  }
 }
 
 function updateZonePips(){
@@ -609,7 +610,6 @@ function analyzeRackFrame(){
   let varSum=0
   for(let i=0;i<lums.length;i++) varSum+=(lums[i]-b)*(lums[i]-b)
   const variance = varSum/lums.length
-
   const rowHasEdge = new Uint8Array(offH)
   for(let y=0;y<offH;y++){
     let ec=0
@@ -627,7 +627,6 @@ function analyzeRackFrame(){
   for(let x=0;x<offW;x++) edgeCols+=colHasEdge[x]
   const rowCoverage = edgeRows/offH
   const colCoverage = edgeCols/offW
-
   const q = Math.floor(offH*0.25)
   let topEdge=0, botEdge=0
   for(let y=0;y<q;y++)         topEdge+=rowHasEdge[y]
@@ -636,20 +635,17 @@ function analyzeRackFrame(){
   let leftEdge=0, rightEdge=0
   for(let x=0;x<qc;x++)        leftEdge+=colHasEdge[x]
   for(let x=offW-qc;x<offW;x++) rightEdge+=colHasEdge[x]
-
   const tooClose  = variance < 400 || b > 215
   const tooDark   = b < 25
   const noFullCoverage = rowCoverage < 0.60 || colCoverage < 0.60
                       || topEdge/q  < 0.35 || botEdge/q   < 0.35
                       || leftEdge/qc < 0.35 || rightEdge/qc < 0.35
-
   return { ok: !tooClose && !tooDark && !noFullCoverage, brightness:b, tooClose, tooDark, noFullCoverage }
 }
 
 // ── Shake vignette ────────────────────────────────────────────────────────────
 function updateShakeVig(){
-  // accelMag is now Pythagorean, resting ~9.8 m/s² (gravity)
-  const excess = accelMag - 14   // above ~1.4g
+  const excess = accelMag - 14
   if(excess > 0){
     const a = Math.min(0.5, excess / 40)
     shakeVig.style.background = `radial-gradient(ellipse at center,transparent 35%,rgba(255,40,40,${a}) 100%)`
@@ -700,8 +696,7 @@ function processRack(now){
 // ── Transition to scan ────────────────────────────────────────────────────────
 function transitionToScan(){
   if(phase==='scan-prep') return
-  phase='scan-prep'   // stop processRack from running during the 3s countdown
-  clearBlock()
+  phase='scan-prep'; clearBlock(); updateSteps()
   rotateHint.classList.add('show')
   let count=3; rhCd.textContent='Starting in 3…'
   const tick=setInterval(()=>{
@@ -713,14 +708,17 @@ function transitionToScan(){
       recIndicator.style.opacity = '1'
       setLandscape(true)
       phase='scan'
+      zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
+      wrongDirSince=null; wrongDirCount=0
+      fastSince=null; stallSince=null
       currentUnit=1
-      resetScanState()
-      unitScanStartTs = Date.now()   // start timing from when scan phase begins
+      unitScanStartTs = Date.now()   // ← start timing unit 1 from here
       zoneprogress.classList.add('show')
       unitLabel.classList.add('show')
       unitNum.textContent='1'
       pauseBtn.textContent='⏸'
       pauseBtn.classList.add('enabled')
+      updateSteps(); updateZonePips()
       showToast('info','→','Scan Unit 1','Hold phone sideways. Sweep camera LEFT → RIGHT.')
     }
   },1000)
@@ -735,7 +733,7 @@ function processScan(now){
     return
   }
 
-  // ── Shake check ───────────────────────────────────────────────────────────
+  // ── Shake check ──────────────────────────────────────────────────────────
   if(accelMag > SHAKE_THRESH){
     shakeBlock = true
     showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
@@ -747,118 +745,100 @@ function processScan(now){
 
   const pan = getPanState()
 
-  // ── Vertical / top-to-bottom motion — tell user immediately ─────────────
+  // ── Vertical / diagonal motion ────────────────────────────────────────────
   if(pan.notHorizontal){
-    lastPanTs = null
-    showBlock('↕️','Wrong Direction!','You are moving TOP → BOTTOM.\nSweep camera LEFT → RIGHT only.')
-    showToast('err','↕️','Go Left → Right!','Don\'t pan up/down — sweep sideways LEFT → RIGHT.')
+    stallSince = null; fastSince = null; wrongDirSince = null
+    showBlock('↕️','Pan Sideways!','Move camera LEFT → RIGHT only — not up or down.')
+    showToast('err','↕️','Go Sideways!','Sweep LEFT → RIGHT — not up/down.')
     return
-  } else {
-    if(blockerTitle.textContent === 'Wrong Direction!') clearBlock()
   }
 
-  // ── Wrong direction — must be CLEARLY leftward for >800ms to stop ─────────
-  // Brief reversals during a right sweep happen naturally — ignore them
+  // ── Wrong direction ───────────────────────────────────────────────────────
   if(pan.wrongDir){
-    lastPanTs = null
+    stallSince = null; fastSince = null
     if(!wrongDirSince) wrongDirSince = now
-    if(now - wrongDirSince > 800){
-      stopAndFail(
-        'Unit ' + currentUnit + ': You swept RIGHT → LEFT.\n' +
-        'Scan must go LEFT → RIGHT.\n' +
-        'Press "Record Again" to restart.'
-      )
-      return
-    }
-    // Brief wrong direction — just show a warning, don't stop
-    showToast('warn','⬅️','Wrong Way!','Sweep LEFT → RIGHT only.')
-    return
-  } else {
-    if(wrongDirSince){ clearBlock(); wrongDirSince = null }
-  }
-
-  // ── Too slow / not yet started — silent unless truly idle at the beginning ──
-  // Never show a blocker mid-sweep — natural deceleration between zones is fine.
-  // Only nudge if user hasn't started at all after 5s from scan start.
-  if(pan.tooSlow){
-    lastPanTs = null
-    if(!stallSince) stallSince = now
-    const idleMs = now - stallSince
-    const scanAge = unitScanStartTs ? (now - unitScanStartTs) : 0
-    // Only show stall hint if user truly hasn't started scanning yet (no zones filled)
-    if(idleMs > 5000 && zonesDone === 0 && currentZone === 0 && zoneTime[0] === 0){
-      showToast('warn','→','Start Sweeping','Sweep camera LEFT → RIGHT to begin scanning.')
-    }
-    return
-  } else {
-    if(stallSince){ clearBlock(); stallSince = null }
-  }
-
-  // ── Fast pan — freeze zone timer only, never stop the recording ───────────
-  // Panning fast doesn't penalise the user — zone timer just doesn't tick.
-  // This forces them to slow down to actually fill the zones.
-  if(pan.tooFast){
-    lastPanTs = null
-    if(!fastSince) fastSince = now
-    if(now - fastSince > 400){
-      showBlock('🐇','Too Fast!','Slow down — sweep smoothly LEFT → RIGHT.')
-      showToast('warn','🐇','Slow Down','Move slower to fill the scan zones.')
-    }
-    return
-  } else {
-    if(fastSince){ clearBlock(); fastSince = null }
-  }
-
-  // ── Valid rightward pan at good speed — accumulate zone time ──────────────
-  clearBlock()
-
-  // unitStartTs used for hard-floor only — set on first valid pan frame
-  if(unitStartTs === null) unitStartTs = now
-
-  if(pan.panningRight){
-    const speedOk = pan.absPan <= MAX_ZONE_SPEED
-    if(speedOk && lastPanTs !== null){
-      const dt = Math.min(now - lastPanTs, 150)
-      zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
-      if(zoneTime[currentZone] >= ZONE_MS){
-        zonesDone = currentZone + 1
-        if(currentZone < N_ZONES - 1) currentZone++
+    if(now - wrongDirSince > 600){
+      wrongDirCount++
+      if(wrongDirCount === 1){
+        showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
+        showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
+        zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
+        updateZonePips()
+        wrongDirSince = null
+        return
+      }
+      if(wrongDirCount >= 2){
+        stopAndFail('You swept the wrong direction twice.\nScan must go LEFT → RIGHT.\nPlease record again from the beginning.')
+        return
       }
     }
-    lastPanTs = speedOk ? now : null
-    updateZonePips()
+    return
   } else {
-    lastPanTs = null
+    if(wrongDirSince) clearBlock()
+    wrongDirSince = null
   }
+
+  // ── Too fast ──────────────────────────────────────────────────────────────
+  if(pan.tooFast){
+    if(!fastSince) fastSince = now
+    if(now - fastSince > 500){
+      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
+      showToast('err','🐇','Too Fast','Slow down your pan speed.')
+    }
+    return
+  } else {
+    if(fastSince){ clearBlock() }
+    fastSince = null
+  }
+
+  // ── Not moving / stalled ──────────────────────────────────────────────────
+  if(pan.tooSlow){
+    if(!stallSince) stallSince = now
+    if(now - stallSince > 5000){
+      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
+      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally LEFT → RIGHT.')
+    }
+    return
+  } else {
+    if(stallSince){ clearBlock() }
+    stallSince = null
+  }
+
+  // ── Valid right-pan: accumulate TIME in the current zone ─────────────────
+  clearBlock()
+
+  if(pan.panningRight && lastPanTs !== null){
+    const dt = Math.min(now - lastPanTs, 150)
+    zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
+    if(zoneTime[currentZone] >= ZONE_MS){
+      zonesDone = currentZone + 1
+      if(currentZone < N_ZONES - 1) currentZone++
+    }
+    updateZonePips()
+  }
+  lastPanTs = pan.panningRight ? now : null
 
   if(zonesDone < N_ZONES) return
 
-  // ── All zones filled — now check total sweep time ─────────────────────────
-  const elapsed = now - (unitStartTs || now)
-  if(elapsed < MIN_UNIT_MS){
-    stopAndFail(
-      'Unit ' + currentUnit + ': Captured in only ' + (elapsed / 1000).toFixed(1) + 's.\n' +
-      'Each unit requires at least 3 seconds LEFT → RIGHT.\n' +
-      'Slow down your sweep and record again.'
-    )
-    return
-  }
+  // ── All 3 zones done — unit complete ─────────────────────────────────────
+  // ── Speed suggestion: check elapsed time for this unit ───────────────────
+  // Purely informational. Does NOT block, stop, or restart recording.
+  const unitElapsed = unitScanStartTs !== null ? (now - unitScanStartTs) : null
 
-  // ── Unit complete ✅ ──────────────────────────────────────────────────────
-  const scanDuration = unitScanStartTs ? (now - unitScanStartTs) : elapsed
-  const completedUnit = currentUnit
   currentUnit++
   unitNum.textContent = currentUnit
-  resetScanState()
+  zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
+  wrongDirSince=null; wrongDirCount=0; fastSince=null; stallSince=null
   updateZonePips()
   clearBlock()
+  unitScanStartTs = now   // ← reset timer for the next unit immediately
 
-  // Suggest slower sweep if under 3s, otherwise praise
-  if(scanDuration < 3000){
-    showToast('warn','⏱','Unit '+completedUnit+' Too Fast',
-      'Captured in '+( scanDuration/1000).toFixed(1)+'s — aim for 3–4 seconds per unit.')
+  if(unitElapsed !== null && unitElapsed < 3000){
+    const secs = (unitElapsed / 1000).toFixed(1)
+    showToast('warn','⏱','Too Quick — ' + secs + 's',
+      'Unit ' + (currentUnit-1) + ' done in ' + secs + 's. Aim for 3–4 sec — sweep a bit slower next unit.')
   } else {
-    showToast('ok','✅','Unit '+completedUnit+' Done!',
+    showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
       'Keep going OR press ⏸ to move to the next unit row.')
   }
 }
@@ -883,6 +863,16 @@ function drawRackGuide(){
   ctx.restore()
 }
 
+function drawScanArrow(){
+  const W=canvas.width, H=canvas.height, t=Date.now()/500
+  ctx.save()
+  ctx.font='bold 50px sans-serif'
+  ctx.fillStyle=`rgba(0,229,255,${.55+Math.sin(t*2)*.3})`
+  ctx.textAlign='center'; ctx.textBaseline='middle'
+  ctx.fillText('→',(.5+Math.sin(t)*.38)*W, H*.5)
+  ctx.restore()
+}
+
 // ── Canvas sync ───────────────────────────────────────────────────────────────
 function syncCanvas(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight }
 syncCanvas()
@@ -892,7 +882,10 @@ window.addEventListener('resize', syncCanvas)
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height)
   updateShakeVig()
-  if(recording && phase==='rack') drawRackGuide()
+  if(recording && phase!=='idle'){
+    drawRackGuide()
+    if(phase==='scan' && !paused) drawScanArrow()
+  }
   if(recording){
     const now=Date.now()
     if(phase==='rack')      processRack(now)
