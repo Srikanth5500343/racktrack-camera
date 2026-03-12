@@ -101,36 +101,7 @@ canvas{
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
 .rec-indicator.show{display:flex;}
 
-.steps{
-  position:absolute;top:58px;left:0;right:0;z-index:10;
-  display:flex;justify-content:center;gap:6px;padding:0 16px;
-}
-.step{
-  flex:1;max-width:110px;
-  display:flex;flex-direction:column;align-items:center;gap:3px;
-  font-family:'Share Tech Mono',monospace;font-size:9px;
-  letter-spacing:0.5px;text-transform:uppercase;color:#444;transition:all 0.4s;
-}
-.step-bar{width:100%;height:3px;background:#222;border-radius:2px;transition:all 0.4s;}
-.step.active .step-bar{background:#ffcc00;}
-.step.active{color:#ffcc00;}
-.step.done .step-bar{background:#00ff88;}
-.step.done{color:#00ff88;}
 
-#zoneprogress{position:absolute;top:88px;left:50%;transform:translateX(-50%);display:none;gap:8px;align-items:center;}
-#zoneprogress.show{display:flex;}
-.zp{
-  width:64px;height:7px;border-radius:4px;
-  background:#1a1a1a;border:1px solid #333;
-  overflow:hidden;position:relative;
-}
-.zp-fill{
-  position:absolute;top:0;left:0;height:100%;width:0%;
-  background:linear-gradient(90deg,#00aaff,#00e5ff);
-  border-radius:4px;transition:width 0.1s linear;
-}
-.zp.done .zp-fill{width:100%;background:linear-gradient(90deg,#00cc66,#00ff88);}
-.zp.active .zp-fill{/* width driven by JS */}
 
 #failedOverlay{
   position:absolute;inset:0;z-index:25;display:none;
@@ -151,14 +122,6 @@ canvas{
   -webkit-tap-highlight-color:transparent;
 }
 .fail-btn:active{transform:scale(0.95);}
-
-#unitLabel{
-  position:absolute;top:96px;right:16px;
-  display:none;flex-direction:column;align-items:flex-end;gap:1px;
-  font-family:'Share Tech Mono',monospace;font-size:10px;color:#555;text-transform:uppercase;
-}
-#unitLabel.show{display:flex;}
-#unitNum{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;color:#00e5ff;line-height:1;}
 
 #blocker{
   position:absolute;inset:0;z-index:20;display:none;
@@ -242,19 +205,7 @@ canvas{
     </div>
   </div>
 
-  <div class="steps">
-    <div class="step" id="step1"><div class="step-bar"></div><span>Full Rack</span></div>
-    <div class="step" id="step2"><div class="step-bar"></div><span>Unit Scan</span></div>
-    <div class="step" id="step3"><div class="step-bar"></div><span>Complete</span></div>
-  </div>
 
-  <div id="zoneprogress">
-    <div class="zp" id="zp0"><div class="zp-fill" id="zpf0"></div></div>
-    <div class="zp" id="zp1"><div class="zp-fill" id="zpf1"></div></div>
-    <div class="zp" id="zp2"><div class="zp-fill" id="zpf2"></div></div>
-  </div>
-
-  <div id="unitLabel">UNIT<div id="unitNum">1</div></div>
 
   <div id="blocker">
     <div class="blocker-icon" id="blockerIcon">⚠️</div>
@@ -298,9 +249,6 @@ const ui             = document.getElementById('ui')
 const rotateHint     = document.getElementById('rotateHint')
 const rhCd           = document.getElementById('rhCd')
 const recIndicator   = document.getElementById('recIndicator')
-const zoneprogress   = document.getElementById('zoneprogress')
-const unitLabel      = document.getElementById('unitLabel')
-const unitNum        = document.getElementById('unitNum')
 const toastInner     = document.getElementById('toastInner')
 const toastIcon      = document.getElementById('toastIcon')
 const toastLabel     = document.getElementById('toastLabel')
@@ -449,7 +397,6 @@ function beginRecording(){
   recordBtn.classList.add('recording'); recordBtn.textContent = '■'
   pauseBtn.classList.remove('enabled')
   pauseBtn.textContent = '⏸'
-  updateSteps()
   showToast('info','📐','Step 1 — Full Rack',
     'Stand back. Fit the ENTIRE rack top-to-bottom in frame.')
 }
@@ -464,11 +411,8 @@ function stopAndFail(msg){
   pauseBtn.classList.remove('enabled')
   clearBlock()
   setLandscape(false)
-  zoneprogress.classList.remove('show')
-  unitLabel.classList.remove('show')
   failMsg.textContent = msg
   failedOverlay.classList.add('show')
-  updateSteps()
 }
 
 // ── Record button ─────────────────────────────────────────────────────────────
@@ -485,10 +429,7 @@ recordBtn.onclick = ()=>{
     pauseBtn.classList.remove('enabled')
     clearBlock()
     failedOverlay.classList.remove('show')
-    zoneprogress.classList.remove('show')
-    unitLabel.classList.remove('show')
     showToast('info','ℹ️','Saved','Recording saved. Press ● to start again.')
-    updateSteps()
   }
 }
 
@@ -528,7 +469,6 @@ pauseBtn.onclick = ()=>{
     zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
     wrongDirSince=null; wrongDirCount=0
     fastSince=null; stallSince=null
-    updateZonePips()
     unitScanStartTs = Date.now()   // ← start timing the new unit from resume
     showToast('info','→','Scan Unit '+currentUnit,
       'Sweep camera slowly LEFT → RIGHT.')
@@ -538,8 +478,6 @@ pauseBtn.onclick = ()=>{
 // ── Record Again ──────────────────────────────────────────────────────────────
 recordAgainBtn.onclick = ()=>{
   failedOverlay.classList.remove('show')
-  zoneprogress.classList.remove('show')
-  unitLabel.classList.remove('show')
   clearBlock()
   beginRecording()
 }
@@ -565,31 +503,7 @@ function clearBlock(){
   blocker.classList.remove('show')
 }
 
-function updateSteps(){
-  const map = {idle:-1, rack:0, 'scan-prep':1, scan:1, done:2}
-  const cur = map[phase] ?? -1
-  for(let i=0;i<3;i++){
-    const el = document.getElementById('step'+(i+1))
-    el.className = 'step'+(i<cur?' done':i===cur?' active':'')
-  }
-}
 
-function updateZonePips(){
-  for(let z=0;z<N_ZONES;z++){
-    const pip  = document.getElementById('zp'+z)
-    const fill = document.getElementById('zpf'+z)
-    if(z < zonesDone){
-      pip.className = 'zp done'
-      fill.style.width = '100%'
-    } else if(z === currentZone && zonesDone < N_ZONES){
-      pip.className = 'zp active'
-      fill.style.width = Math.min(100, (zoneTime[z] / ZONE_MS) * 100).toFixed(1) + '%'
-    } else {
-      pip.className = 'zp'
-      fill.style.width = '0%'
-    }
-  }
-}
 
 // ── Frame analysis ────────────────────────────────────────────────────────────
 function grabOff(){
@@ -696,7 +610,7 @@ function processRack(now){
 // ── Transition to scan ────────────────────────────────────────────────────────
 function transitionToScan(){
   if(phase==='scan-prep') return
-  phase='scan-prep'; clearBlock(); updateSteps()
+  phase='scan-prep'; clearBlock()
   rotateHint.classList.add('show')
   let count=3; rhCd.textContent='Starting in 3…'
   const tick=setInterval(()=>{
@@ -712,13 +626,9 @@ function transitionToScan(){
       wrongDirSince=null; wrongDirCount=0
       fastSince=null; stallSince=null
       currentUnit=1
-      unitScanStartTs = Date.now()   // ← start timing unit 1 from here
-      zoneprogress.classList.add('show')
-      unitLabel.classList.add('show')
-      unitNum.textContent='1'
+      unitScanStartTs = Date.now()
       pauseBtn.textContent='⏸'
       pauseBtn.classList.add('enabled')
-      updateSteps(); updateZonePips()
       showToast('info','→','Scan Unit 1','Hold phone sideways. Sweep camera LEFT → RIGHT.')
     }
   },1000)
@@ -763,7 +673,6 @@ function processScan(now){
         showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
         showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
         zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
-        updateZonePips()
         wrongDirSince = null
         return
       }
@@ -814,24 +723,18 @@ function processScan(now){
       zonesDone = currentZone + 1
       if(currentZone < N_ZONES - 1) currentZone++
     }
-    updateZonePips()
   }
   lastPanTs = pan.panningRight ? now : null
 
   if(zonesDone < N_ZONES) return
 
-  // ── All 3 zones done — unit complete ─────────────────────────────────────
-  // ── Speed suggestion: check elapsed time for this unit ───────────────────
-  // Purely informational. Does NOT block, stop, or restart recording.
   const unitElapsed = unitScanStartTs !== null ? (now - unitScanStartTs) : null
 
   currentUnit++
-  unitNum.textContent = currentUnit
   zoneTime=[0,0,0]; currentZone=0; zonesDone=0; lastPanTs=null
   wrongDirSince=null; wrongDirCount=0; fastSince=null; stallSince=null
-  updateZonePips()
   clearBlock()
-  unitScanStartTs = now   // ← reset timer for the next unit immediately
+  unitScanStartTs = now
 
   if(unitElapsed !== null && unitElapsed < 3000){
     const secs = (unitElapsed / 1000).toFixed(1)
@@ -855,21 +758,6 @@ function drawRackGuide(){
   ;[[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,sx,sy])=>{
     ctx.beginPath(); ctx.moveTo(cx+sx*20,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+sy*20); ctx.stroke()
   })
-  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1
-  for(let r=1;r<8;r++){
-    const ry=by+bh*(r/8)
-    ctx.beginPath(); ctx.moveTo(bx,ry); ctx.lineTo(bx+bw,ry); ctx.stroke()
-  }
-  ctx.restore()
-}
-
-function drawScanArrow(){
-  const W=canvas.width, H=canvas.height, t=Date.now()/500
-  ctx.save()
-  ctx.font='bold 50px sans-serif'
-  ctx.fillStyle=`rgba(0,229,255,${.55+Math.sin(t*2)*.3})`
-  ctx.textAlign='center'; ctx.textBaseline='middle'
-  ctx.fillText('→',(.5+Math.sin(t)*.38)*W, H*.5)
   ctx.restore()
 }
 
@@ -884,7 +772,6 @@ function loop(){
   updateShakeVig()
   if(recording && phase!=='idle'){
     drawRackGuide()
-    if(phase==='scan' && !paused) drawScanArrow()
   }
   if(recording){
     const now=Date.now()
