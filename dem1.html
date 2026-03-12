@@ -550,6 +550,7 @@ pauseBtn.onclick = ()=>{
     pauseBtn.textContent = '⏸'
     // Reset scan state for the new unit row
     resetScanState()
+    unitScanStartTs = Date.now()   // start timing from when user resumes
     updateZonePips()
     showToast('info','→','Scan Unit '+currentUnit,
       'Sweep camera slowly LEFT → RIGHT.')
@@ -746,6 +747,7 @@ function transitionToScan(){
       phase='scan'
       currentUnit=1
       resetScanState()
+      unitScanStartTs = Date.now()   // start timing from when scan phase begins
       zoneprogress.classList.add('show')
       unitLabel.classList.add('show')
       unitNum.textContent='1'
@@ -809,14 +811,17 @@ function processScan(now){
     if(wrongDirSince){ clearBlock(); wrongDirSince = null }
   }
 
-  // ── Too slow / stalled — guide user, never auto-stop ─────────────────────
-  // User pausing between units or repositioning is normal — just nudge them
+  // ── Too slow / not yet started — silent unless truly idle at the beginning ──
+  // Never show a blocker mid-sweep — natural deceleration between zones is fine.
+  // Only nudge if user hasn't started at all after 5s from scan start.
   if(pan.tooSlow){
     lastPanTs = null
     if(!stallSince) stallSince = now
-    if(now - stallSince > 4000){
-      showBlock('→','Keep Sweeping','Sweep the camera LEFT → RIGHT slowly and steadily.')
-      showToast('warn','→','Keep Moving','Pan left → right to scan the unit.')
+    const idleMs = now - stallSince
+    const scanAge = unitScanStartTs ? (now - unitScanStartTs) : 0
+    // Only show stall hint if user truly hasn't started scanning yet (no zones filled)
+    if(idleMs > 5000 && zonesDone === 0 && currentZone === 0 && zoneTime[0] === 0){
+      showToast('warn','→','Start Sweeping','Sweep camera LEFT → RIGHT to begin scanning.')
     }
     return
   } else {
@@ -841,9 +846,8 @@ function processScan(now){
   // ── Valid rightward pan at good speed — accumulate zone time ──────────────
   clearBlock()
 
-  // Record when this unit's first valid pan started (wall-clock)
-  if(unitStartTs     === null) unitStartTs     = now
-  if(unitScanStartTs === null) unitScanStartTs = now
+  // unitStartTs used for hard-floor only — set on first valid pan frame
+  if(unitStartTs === null) unitStartTs = now
 
   if(pan.panningRight){
     const speedOk = pan.absPan <= MAX_ZONE_SPEED
