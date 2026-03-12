@@ -117,10 +117,21 @@ canvas{
 .step.done .step-bar{background:#00ff88;}
 .step.done{color:#00ff88;}
 
-#zoneprogress{position:absolute;top:88px;left:50%;transform:translateX(-50%);display:none;gap:8px;}
+#zoneprogress{position:absolute;top:88px;left:50%;transform:translateX(-50%);display:none;gap:8px;align-items:center;}
 #zoneprogress.show{display:flex;}
-.zp{width:60px;height:5px;border-radius:3px;background:#222;transition:all 0.3s;}
-.zp.done{background:#00ff88;}
+/* Each pip is a timed fill bar */
+.zp{
+  width:64px;height:7px;border-radius:4px;
+  background:#1a1a1a;border:1px solid #333;
+  overflow:hidden;position:relative;
+}
+.zp-fill{
+  position:absolute;top:0;left:0;height:100%;width:0%;
+  background:linear-gradient(90deg,#00aaff,#00e5ff);
+  border-radius:4px;transition:width 0.1s linear;
+}
+.zp.done .zp-fill{width:100%;background:linear-gradient(90deg,#00cc66,#00ff88);}
+.zp.active .zp-fill{/* width driven by JS */}
 
 #failedOverlay{
   position:absolute;inset:0;z-index:25;display:none;
@@ -239,9 +250,9 @@ canvas{
   </div>
 
   <div id="zoneprogress">
-    <div class="zp" id="zp0"></div>
-    <div class="zp" id="zp1"></div>
-    <div class="zp" id="zp2"></div>
+    <div class="zp" id="zp0"><div class="zp-fill" id="zpf0"></div></div>
+    <div class="zp" id="zp1"><div class="zp-fill" id="zpf1"></div></div>
+    <div class="zp" id="zp2"><div class="zp-fill" id="zpf2"></div></div>
   </div>
 
   <div id="unitLabel">UNIT<div id="unitNum">1</div></div>
@@ -319,10 +330,16 @@ let rackPhaseStart = 0
 let rackHoldStart  = null
 const RACK_HOLD_MS = 2500
 
-// Scan phase
+// Scan phase — TIME-BASED zone system
+// Each of the 3 zones requires ZONE_MS ms of active rightward panning.
+// Zones are sequential: zone 0 must complete before zone 1 starts, etc.
+// Pausing mid-zone is fine — timers freeze, not reset.
 const N_ZONES    = 3
-let horizAccum   = 0
-let zonesSeen    = new Set()
+const ZONE_MS    = 1100   // ms per zone → ~3.3s total for all 3
+let zoneTime     = [0, 0, 0]   // accumulated ms per zone
+let currentZone  = 0           // which zone we're currently filling
+let zonesDone    = 0           // how many zones are fully complete
+let lastPanTs    = null        // timestamp of last frame where pan was valid
 let currentUnit  = 1
 let wrongDirSince  = null
 let wrongDirCount  = 0
@@ -520,9 +537,8 @@ pauseBtn.onclick = ()=>{
     if(recorder.state === 'paused') recorder.resume()
     recIndicator.style.opacity = '1'
     pauseBtn.textContent = '⏸'
-    zonesSeen = new Set(); horizAccum = 0
-    wrongDirSince = null; wrongDirCount = 0
-    fastSince = null; stallSince = null
+    // Reset scan state for the new unit row
+    resetScanState()
     updateZonePips()
     showToast('info','→','Scan Unit '+currentUnit,
       'Sweep camera slowly LEFT → RIGHT.')
@@ -567,9 +583,30 @@ function updateSteps(){
     el.className = 'step'+(i<cur?' done':i===cur?' active':'')
   }
 }
+function resetScanState(){
+  zoneTime    = [0, 0, 0]
+  currentZone = 0
+  zonesDone   = 0
+  lastPanTs   = null
+  wrongDirSince = null; wrongDirCount = 0
+  fastSince = null; stallSince = null
+}
+
 function updateZonePips(){
-  for(let z=0;z<N_ZONES;z++)
-    document.getElementById('zp'+z).className = 'zp'+(zonesSeen.has(z)?' done':'')
+  for(let z=0;z<N_ZONES;z++){
+    const pip  = document.getElementById('zp'+z)
+    const fill = document.getElementById('zpf'+z)
+    if(z < zonesDone){
+      pip.className = 'zp done'
+      fill.style.width = '100%'
+    } else if(z === currentZone && zonesDone < N_ZONES){
+      pip.className = 'zp active'
+      fill.style.width = Math.min(100, (zoneTime[z] / ZONE_MS) * 100).toFixed(1) + '%'
+    } else {
+      pip.className = 'zp'
+      fill.style.width = '0%'
+    }
+  }
 }
 
 // ── Frame analysis ────────────────────────────────────────────────────────────
@@ -694,9 +731,8 @@ function transitionToScan(){
       recIndicator.style.opacity = '1'
       setLandscape(true)
       phase='scan'
-      zonesSeen=new Set(); horizAccum=0; currentUnit=1
-      wrongDirSince=null; wrongDirCount=0
-      fastSince=null; stallSince=null
+      currentUnit=1
+      resetScanState()
       zoneprogress.classList.add('show')
       unitLabel.classList.add('show')
       unitNum.textContent='1'
@@ -751,7 +787,7 @@ function processScan(now){
       if(wrongDirCount === 1){
         showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
         showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
-        zonesSeen = new Set(); horizAccum = 0; updateZonePips()
+        resetScanState(); updateZonePips()
         wrongDirSince = null
         return
       }
@@ -795,32 +831,31 @@ function processScan(now){
     stallSince = null
   }
 
-  // ── Valid right-pan: accumulate and advance zones ─────────────────────────
+  // ── Valid right-pan: accumulate TIME in the current zone ─────────────────
   clearBlock()
 
-  // Only accumulate when panning right — pausing in middle is fine, no zone loss
-  if(pan.panningRight){
-    horizAccum += pan.absPan
-  }
+  if(pan.panningRight && lastPanTs !== null){
+    const dt = Math.min(now - lastPanTs, 150)   // cap delta to avoid big jumps after stalls
+    zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
 
-  // Zone thresholds — spread across a comfortable sweep distance
-  // ZONE_DIST = total accumulated deg/s to earn all 3 zones
-  const ZONE_DIST  = 100   // reduced from 120 — less sweep needed per unit
-  const zoneStep   = ZONE_DIST / N_ZONES
-  const earnedZone = Math.min(N_ZONES - 1, Math.floor(horizAccum / zoneStep))
-  if(horizAccum > 0 && !zonesSeen.has(earnedZone)){
-    zonesSeen.add(earnedZone)
+    // Zone complete?
+    if(zoneTime[currentZone] >= ZONE_MS){
+      zonesDone = currentZone + 1
+      if(currentZone < N_ZONES - 1){
+        currentZone++   // advance to next zone
+      }
+    }
     updateZonePips()
   }
+  lastPanTs = pan.panningRight ? now : null
 
-  if(zonesSeen.size < N_ZONES) return
+  if(zonesDone < N_ZONES) return
 
-  // ── All 3 zones covered — unit complete ──────────────────────────────────
+  // ── All 3 zones timed out — unit complete ─────────────────────────────────
   currentUnit++
   unitNum.textContent = currentUnit
-  zonesSeen = new Set(); horizAccum = 0; updateZonePips()
-  wrongDirSince = null; wrongDirCount = 0
-  fastSince = null; stallSince = null
+  resetScanState()
+  updateZonePips()
   clearBlock()
   showToast('ok','✅','Unit '+(currentUnit-1)+' Done!',
     'Keep going OR press ⏸ to move to the next unit row.')
