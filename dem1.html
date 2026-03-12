@@ -700,6 +700,8 @@ function processRack(now){
 // ── Transition to scan ────────────────────────────────────────────────────────
 function transitionToScan(){
   if(phase==='scan-prep') return
+  phase='scan-prep'   // stop processRack from running during the 3s countdown
+  clearBlock()
   rotateHint.classList.add('show')
   let count=3; rhCd.textContent='Starting in 3…'
   const tick=setInterval(()=>{
@@ -861,6 +863,26 @@ function processScan(now){
   }
 }
 
+// ── Canvas drawing ────────────────────────────────────────────────────────────
+function drawRackGuide(){
+  const W=canvas.width, H=canvas.height, t=Date.now()/1000
+  const bw=W*.88, bh=H*.86, bx=(W-bw)/2, by=(H-bh)/2
+  ctx.save()
+  ctx.strokeStyle=`rgba(255,204,0,${.5+Math.sin(t*2.5)*.2})`
+  ctx.lineWidth=2; ctx.setLineDash([14,7]); ctx.lineDashOffset=-(t*25)%21
+  ctx.strokeRect(bx,by,bw,bh); ctx.setLineDash([])
+  ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2.5
+  ;[[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,sx,sy])=>{
+    ctx.beginPath(); ctx.moveTo(cx+sx*20,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+sy*20); ctx.stroke()
+  })
+  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1
+  for(let r=1;r<8;r++){
+    const ry=by+bh*(r/8)
+    ctx.beginPath(); ctx.moveTo(bx,ry); ctx.lineTo(bx+bw,ry); ctx.stroke()
+  }
+  ctx.restore()
+}
+
 // ── Canvas sync ───────────────────────────────────────────────────────────────
 function syncCanvas(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight }
 syncCanvas()
@@ -870,6 +892,7 @@ window.addEventListener('resize', syncCanvas)
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height)
   updateShakeVig()
+  if(recording && phase==='rack') drawRackGuide()
   if(recording){
     const now=Date.now()
     if(phase==='rack')      processRack(now)
