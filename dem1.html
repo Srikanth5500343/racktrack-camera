@@ -346,7 +346,6 @@ let lastPanTs    = null
 let unitStartTs  = null       // wall-clock when current unit scan began
 let currentUnit  = 1
 let wrongDirSince  = null
-let wrongDirCount  = 0
 let fastSince      = null
 let stallSince     = null
 let shakeBlock     = false
@@ -593,7 +592,7 @@ function resetScanState(){
   zonesDone   = 0
   lastPanTs   = null
   unitStartTs = null
-  wrongDirSince = null; wrongDirCount = 0
+  wrongDirSince = null
   fastSince = null; stallSince = null
 }
 
@@ -782,24 +781,16 @@ function processScan(now){
     return
   }
 
-  // ── Wrong direction — must be clearly and intentionally leftward ──────────
+  // ── Wrong direction — sustained leftward pan → STOP recording ────────────
   if(pan.wrongDir){
     stallSince = null; fastSince = null
     if(!wrongDirSince) wrongDirSince = now
-    // Require 600ms of sustained wrong-direction before reacting (filters brief reversals)
     if(now - wrongDirSince > 600){
-      wrongDirCount++
-      if(wrongDirCount === 1){
-        showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
-        showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
-        resetScanState(); updateZonePips()
-        wrongDirSince = null
-        return
-      }
-      if(wrongDirCount >= 2){
-        stopAndFail('You swept the wrong direction twice.\nScan must go LEFT → RIGHT.\nPlease record again from the beginning.')
-        return
-      }
+      stopAndFail(
+        'Unit ' + currentUnit + ': You swept RIGHT → LEFT.\n' +
+        'Scan must go LEFT → RIGHT only.\n' +
+        'Press "Record Again" to restart.'
+      )
     }
     return
   } else {
@@ -807,63 +798,71 @@ function processScan(now){
     wrongDirSince = null
   }
 
-  // ── Too fast (global hard block — way over speed limit) ──────────────────
+  // ── Too fast — warn first, then STOP if they don't slow down ─────────────
   if(pan.tooFast){
     if(!fastSince) fastSince = now
-    lastPanTs = null   // freeze zone timer while too fast
-    if(now - fastSince > 400){
-      showBlock('🐇','Too Fast!','Slow down — sweep takes at least 3 seconds.')
-      showToast('err','🐇','Too Fast','Slow and steady — at least 3 sec per unit.')
+    lastPanTs = null
+    const fastMs = now - fastSince
+    if(fastMs > 1500){
+      // Swept too fast for more than 1.5s continuously → hard stop
+      stopAndFail(
+        'Unit ' + currentUnit + ': You swept too quickly.\n' +
+        'Each unit must be captured in 3–4 seconds, LEFT → RIGHT.\n' +
+        'Press "Record Again" to restart.'
+      )
+      return
+    }
+    if(fastMs > 300){
+      showBlock('🐇','Too Fast!','Slow down — each unit needs 3–4 seconds to scan.')
+      showToast('err','🐇','Too Fast!','Slow down or recording will stop.')
     }
     return
   } else {
-    if(fastSince){ clearBlock() }
+    if(fastSince) clearBlock()
     fastSince = null
   }
 
   // ── Not moving / stalled ─────────────────────────────────────────────────
   if(pan.tooSlow){
     if(!stallSince) stallSince = now
-    lastPanTs = null   // freeze zone timer while stalled
-    if(now - stallSince > 5000){
-      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
-      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally LEFT → RIGHT.')
+    lastPanTs = null
+    if(now - stallSince > 6000){
+      stopAndFail(
+        'Unit ' + currentUnit + ': You stopped moving for too long.\n' +
+        'Sweep the camera continuously LEFT → RIGHT.\n' +
+        'Press "Record Again" to restart.'
+      )
+      return
+    }
+    if(now - stallSince > 3000){
+      showBlock('→','Keep Sweeping!','Don\'t stop — sweep LEFT → RIGHT continuously.\nRecording will stop if you stall.')
+      showToast('warn','→','Keep Moving','Sweep LEFT → RIGHT — don\'t stop.')
     }
     return
   } else {
-    if(stallSince){ clearBlock() }
+    if(stallSince) clearBlock()
     stallSince = null
   }
 
   // ── Valid rightward pan — accumulate zone time ────────────────────────────
   clearBlock()
 
-  // Track wall-clock start of this unit's scan (for hard-floor enforcement)
+  // Wall-clock start of this unit scan
   if(unitStartTs === null) unitStartTs = now
 
   if(pan.panningRight){
-    // Speed gate: only tick the zone timer if moving at a reasonable pace.
-    // Panning too fast (>MAX_ZONE_SPEED) freezes the timer — speed can't shortcut time.
+    // Speed gate: >MAX_ZONE_SPEED = timer freezes (can't rush through with fast pan)
     const speedOk = pan.absPan <= MAX_ZONE_SPEED
 
     if(speedOk && lastPanTs !== null){
       const dt = Math.min(now - lastPanTs, 150)
       zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
-
       if(zoneTime[currentZone] >= ZONE_MS){
         zonesDone = currentZone + 1
         if(currentZone < N_ZONES - 1) currentZone++
       }
     }
-
-    // Show subtle "too fast for zone" hint without full blocker
-    if(!speedOk){
-      lastPanTs = null
-      showToast('warn','🐢','Slow Down','Move slower — timer only fills at a steady pace.')
-    } else {
-      lastPanTs = now
-    }
-
+    lastPanTs = speedOk ? now : null
     updateZonePips()
   } else {
     lastPanTs = null
@@ -871,15 +870,19 @@ function processScan(now){
 
   if(zonesDone < N_ZONES) return
 
-  // ── All 3 zones timed — check hard floor before completing ────────────────
+  // ── All zones filled — enforce hard 3-second floor ────────────────────────
   const elapsed = now - (unitStartTs || now)
   if(elapsed < MIN_UNIT_MS){
-    // Zones filled too fast (edge case) — freeze until floor is met
-    showToast('warn','⏱','Hold On…', `Keep sweeping — ${((MIN_UNIT_MS - elapsed)/1000).toFixed(1)}s remaining.`)
+    // Shouldn't normally reach here (speed gate prevents it), but hard stop if so
+    stopAndFail(
+      'Unit ' + currentUnit + ': Captured too quickly (' + (elapsed/1000).toFixed(1) + 's).\n' +
+      'Each unit requires at least 3 seconds LEFT → RIGHT.\n' +
+      'Press "Record Again" to restart.'
+    )
     return
   }
 
-  // ── Unit complete ─────────────────────────────────────────────────────────
+  // ── Unit complete ✅ ──────────────────────────────────────────────────────
   currentUnit++
   unitNum.textContent = currentUnit
   resetScanState()
