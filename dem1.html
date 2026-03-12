@@ -331,21 +331,18 @@ let rackHoldStart  = null
 const RACK_HOLD_MS = 2500
 
 // Scan phase — TIME-BASED zone system
-// Each of the 3 zones requires ZONE_MS ms of VALID rightward panning.
-// Zones are sequential: zone 0 must complete before zone 1 starts.
-// Panning too fast = timer FREEZES (speed cannot substitute for time).
-// Hard floor: unit cannot complete in under MIN_UNIT_MS total wall-clock time.
-const N_ZONES        = 3
-const ZONE_MS        = 1100   // ms of valid pan needed per zone → 3.3s minimum
-const MAX_ZONE_SPEED = 55     // deg/s above this, zone timer does NOT tick
-const MIN_UNIT_MS    = 3000   // hard floor: unit can NEVER finish in under 3s
-let zoneTime     = [0, 0, 0]
-let currentZone  = 0
-let zonesDone    = 0
-let lastPanTs    = null
-let unitStartTs  = null       // wall-clock when current unit scan began
+// Each of the 3 zones requires ZONE_MS ms of active rightward panning.
+// Zones are sequential: zone 0 must complete before zone 1 starts, etc.
+// Pausing mid-zone is fine — timers freeze, not reset.
+const N_ZONES    = 3
+const ZONE_MS    = 1100   // ms per zone → ~3.3s total for all 3
+let zoneTime     = [0, 0, 0]   // accumulated ms per zone
+let currentZone  = 0           // which zone we're currently filling
+let zonesDone    = 0           // how many zones are fully complete
+let lastPanTs    = null        // timestamp of last frame where pan was valid
 let currentUnit  = 1
 let wrongDirSince  = null
+let wrongDirCount  = 0
 let fastSince      = null
 let stallSince     = null
 let shakeBlock     = false
@@ -591,8 +588,7 @@ function resetScanState(){
   currentZone = 0
   zonesDone   = 0
   lastPanTs   = null
-  unitStartTs = null
-  wrongDirSince = null
+  wrongDirSince = null; wrongDirCount = 0
   fastSince = null; stallSince = null
 }
 
@@ -757,116 +753,105 @@ function processScan(now){
     return
   }
 
-  // ── Shake check ───────────────────────────────────────────────────────────
+  // ── Shake check — only truly violent shaking blocks ──────────────────────
+  // accelMag at rest ≈ 9.8 (gravity). Threshold 55 = ~5.6g equivalent.
   if(accelMag > SHAKE_THRESH){
     shakeBlock = true
     showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
     showToast('err','🤚','Shaking!','Hold camera steady.')
     return
   }
+  // Hysteresis: clear shake block when motion settles
   if(shakeBlock && accelMag < 30){ shakeBlock = false; clearBlock() }
   if(shakeBlock) return
 
   const pan = getPanState()
 
-  // ── Vertical / diagonal — just guide, never stop ──────────────────────────
+  // ── Vertical / diagonal motion ────────────────────────────────────────────
+  // Must be clearly tilting AND tilt-to-pan ratio is high (not just pan noise)
   if(pan.notHorizontal){
-    lastPanTs = null
+    stallSince = null; fastSince = null; wrongDirSince = null
     showBlock('↕️','Pan Sideways!','Move camera LEFT → RIGHT only — not up or down.')
     showToast('err','↕️','Go Sideways!','Sweep LEFT → RIGHT — not up/down.')
+    // Don't reset zones here — brief vertical bumps shouldn't erase progress
     return
-  } else {
-    // clear vertical block only
-    if(blockerTitle.textContent === 'Pan Sideways!') clearBlock()
   }
 
-  // ── Wrong direction — must be CLEARLY leftward for >800ms to stop ─────────
-  // Brief reversals during a right sweep happen naturally — ignore them
+  // ── Wrong direction — must be clearly and intentionally leftward ──────────
   if(pan.wrongDir){
-    lastPanTs = null
+    stallSince = null; fastSince = null
     if(!wrongDirSince) wrongDirSince = now
-    if(now - wrongDirSince > 800){
-      stopAndFail(
-        'Unit ' + currentUnit + ': You swept RIGHT → LEFT.\n' +
-        'Scan must go LEFT → RIGHT.\n' +
-        'Press "Record Again" to restart.'
-      )
-      return
-    }
-    // Brief wrong direction — just show a warning, don't stop
-    showToast('warn','⬅️','Wrong Way!','Sweep LEFT → RIGHT only.')
-    return
-  } else {
-    if(wrongDirSince){ clearBlock(); wrongDirSince = null }
-  }
-
-  // ── Too slow / stalled — guide user, never auto-stop ─────────────────────
-  // User pausing between units or repositioning is normal — just nudge them
-  if(pan.tooSlow){
-    lastPanTs = null
-    if(!stallSince) stallSince = now
-    if(now - stallSince > 4000){
-      showBlock('→','Keep Sweeping','Sweep the camera LEFT → RIGHT slowly and steadily.')
-      showToast('warn','→','Keep Moving','Pan left → right to scan the unit.')
-    }
-    return
-  } else {
-    if(stallSince){ clearBlock(); stallSince = null }
-  }
-
-  // ── Fast pan — freeze zone timer only, never stop the recording ───────────
-  // Panning fast doesn't penalise the user — zone timer just doesn't tick.
-  // This forces them to slow down to actually fill the zones.
-  if(pan.tooFast){
-    lastPanTs = null
-    if(!fastSince) fastSince = now
-    if(now - fastSince > 400){
-      showBlock('🐇','Too Fast!','Slow down — sweep smoothly LEFT → RIGHT.')
-      showToast('warn','🐇','Slow Down','Move slower to fill the scan zones.')
-    }
-    return
-  } else {
-    if(fastSince){ clearBlock(); fastSince = null }
-  }
-
-  // ── Valid rightward pan at good speed — accumulate zone time ──────────────
-  clearBlock()
-
-  // Record when this unit's first valid pan started (wall-clock)
-  if(unitStartTs === null) unitStartTs = now
-
-  if(pan.panningRight){
-    const speedOk = pan.absPan <= MAX_ZONE_SPEED
-    if(speedOk && lastPanTs !== null){
-      const dt = Math.min(now - lastPanTs, 150)
-      zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
-      if(zoneTime[currentZone] >= ZONE_MS){
-        zonesDone = currentZone + 1
-        if(currentZone < N_ZONES - 1) currentZone++
+    // Require 600ms of sustained wrong-direction before reacting (filters brief reversals)
+    if(now - wrongDirSince > 600){
+      wrongDirCount++
+      if(wrongDirCount === 1){
+        showBlock('⬅️','Wrong Direction!','Pan LEFT → RIGHT only.\nZones reset — start from the left again.')
+        showToast('err','⬅️','Wrong Direction!','Sweep LEFT → RIGHT only. Zones reset.')
+        resetScanState(); updateZonePips()
+        wrongDirSince = null
+        return
+      }
+      if(wrongDirCount >= 2){
+        stopAndFail('You swept the wrong direction twice.\nScan must go LEFT → RIGHT.\nPlease record again from the beginning.')
+        return
       }
     }
-    lastPanTs = speedOk ? now : null
-    updateZonePips()
+    return
   } else {
-    lastPanTs = null
+    if(wrongDirSince) clearBlock()
+    wrongDirSince = null
   }
+
+  // ── Too fast ──────────────────────────────────────────────────────────────
+  if(pan.tooFast){
+    if(!fastSince) fastSince = now
+    if(now - fastSince > 500){
+      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
+      showToast('err','🐇','Too Fast','Slow down your pan speed.')
+    }
+    return
+  } else {
+    if(fastSince){ clearBlock() }
+    fastSince = null
+  }
+
+  // ── Not moving / stalled ──────────────────────────────────────────────────
+  // Only show stall warning after 5 seconds (was 4s) — avoid false positives
+  // on brief natural pauses during a sweep
+  if(pan.tooSlow){
+    if(!stallSince) stallSince = now
+    if(now - stallSince > 5000){
+      showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
+      showToast('warn','→','Sweep Left → Right','Pan the camera horizontally LEFT → RIGHT.')
+    }
+    // Don't return early — if zones have been earned already, preserve them
+    return
+  } else {
+    if(stallSince){ clearBlock() }
+    stallSince = null
+  }
+
+  // ── Valid right-pan: accumulate TIME in the current zone ─────────────────
+  clearBlock()
+
+  if(pan.panningRight && lastPanTs !== null){
+    const dt = Math.min(now - lastPanTs, 150)   // cap delta to avoid big jumps after stalls
+    zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
+
+    // Zone complete?
+    if(zoneTime[currentZone] >= ZONE_MS){
+      zonesDone = currentZone + 1
+      if(currentZone < N_ZONES - 1){
+        currentZone++   // advance to next zone
+      }
+    }
+    updateZonePips()
+  }
+  lastPanTs = pan.panningRight ? now : null
 
   if(zonesDone < N_ZONES) return
 
-  // ── All zones filled — now check total sweep time ─────────────────────────
-  // Only HERE do we evaluate if the sweep was fast enough.
-  // If under MIN_UNIT_MS → the user rushed → stop and make them redo it.
-  const elapsed = now - (unitStartTs || now)
-  if(elapsed < MIN_UNIT_MS){
-    stopAndFail(
-      'Unit ' + currentUnit + ': Captured in only ' + (elapsed / 1000).toFixed(1) + 's.\n' +
-      'Each unit requires at least 3 seconds LEFT → RIGHT.\n' +
-      'Slow down your sweep and record again.'
-    )
-    return
-  }
-
-  // ── Unit complete ✅ ──────────────────────────────────────────────────────
+  // ── All 3 zones timed out — unit complete ─────────────────────────────────
   currentUnit++
   unitNum.textContent = currentUnit
   resetScanState()
