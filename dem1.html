@@ -757,103 +757,86 @@ function processScan(now){
     return
   }
 
-  // ── Shake check — only truly violent shaking blocks ──────────────────────
-  // accelMag at rest ≈ 9.8 (gravity). Threshold 55 = ~5.6g equivalent.
+  // ── Shake check ───────────────────────────────────────────────────────────
   if(accelMag > SHAKE_THRESH){
     shakeBlock = true
     showBlock('🤚','Too Shaky','Hold steady. Move slowly left to right only.')
     showToast('err','🤚','Shaking!','Hold camera steady.')
     return
   }
-  // Hysteresis: clear shake block when motion settles
   if(shakeBlock && accelMag < 30){ shakeBlock = false; clearBlock() }
   if(shakeBlock) return
 
   const pan = getPanState()
 
-  // ── Vertical / diagonal motion ────────────────────────────────────────────
-  // Must be clearly tilting AND tilt-to-pan ratio is high (not just pan noise)
+  // ── Vertical / diagonal — just guide, never stop ──────────────────────────
   if(pan.notHorizontal){
-    stallSince = null; fastSince = null; wrongDirSince = null
+    lastPanTs = null
     showBlock('↕️','Pan Sideways!','Move camera LEFT → RIGHT only — not up or down.')
     showToast('err','↕️','Go Sideways!','Sweep LEFT → RIGHT — not up/down.')
-    // Don't reset zones here — brief vertical bumps shouldn't erase progress
     return
+  } else {
+    // clear vertical block only
+    if(blockerTitle.textContent === 'Pan Sideways!') clearBlock()
   }
 
-  // ── Wrong direction — sustained leftward pan → STOP recording ────────────
+  // ── Wrong direction — must be CLEARLY leftward for >800ms to stop ─────────
+  // Brief reversals during a right sweep happen naturally — ignore them
   if(pan.wrongDir){
-    stallSince = null; fastSince = null
+    lastPanTs = null
     if(!wrongDirSince) wrongDirSince = now
-    if(now - wrongDirSince > 600){
+    if(now - wrongDirSince > 800){
       stopAndFail(
         'Unit ' + currentUnit + ': You swept RIGHT → LEFT.\n' +
-        'Scan must go LEFT → RIGHT only.\n' +
-        'Press "Record Again" to restart.'
-      )
-    }
-    return
-  } else {
-    if(wrongDirSince) clearBlock()
-    wrongDirSince = null
-  }
-
-  // ── Too fast — warn first, then STOP if they don't slow down ─────────────
-  if(pan.tooFast){
-    if(!fastSince) fastSince = now
-    lastPanTs = null
-    const fastMs = now - fastSince
-    if(fastMs > 1500){
-      // Swept too fast for more than 1.5s continuously → hard stop
-      stopAndFail(
-        'Unit ' + currentUnit + ': You swept too quickly.\n' +
-        'Each unit must be captured in 3–4 seconds, LEFT → RIGHT.\n' +
+        'Scan must go LEFT → RIGHT.\n' +
         'Press "Record Again" to restart.'
       )
       return
     }
-    if(fastMs > 300){
-      showBlock('🐇','Too Fast!','Slow down — each unit needs 3–4 seconds to scan.')
-      showToast('err','🐇','Too Fast!','Slow down or recording will stop.')
-    }
+    // Brief wrong direction — just show a warning, don't stop
+    showToast('warn','⬅️','Wrong Way!','Sweep LEFT → RIGHT only.')
     return
   } else {
-    if(fastSince) clearBlock()
-    fastSince = null
+    if(wrongDirSince){ clearBlock(); wrongDirSince = null }
   }
 
-  // ── Not moving / stalled ─────────────────────────────────────────────────
+  // ── Too slow / stalled — guide user, never auto-stop ─────────────────────
+  // User pausing between units or repositioning is normal — just nudge them
   if(pan.tooSlow){
-    if(!stallSince) stallSince = now
     lastPanTs = null
-    if(now - stallSince > 6000){
-      stopAndFail(
-        'Unit ' + currentUnit + ': You stopped moving for too long.\n' +
-        'Sweep the camera continuously LEFT → RIGHT.\n' +
-        'Press "Record Again" to restart.'
-      )
-      return
-    }
-    if(now - stallSince > 3000){
-      showBlock('→','Keep Sweeping!','Don\'t stop — sweep LEFT → RIGHT continuously.\nRecording will stop if you stall.')
-      showToast('warn','→','Keep Moving','Sweep LEFT → RIGHT — don\'t stop.')
+    if(!stallSince) stallSince = now
+    if(now - stallSince > 4000){
+      showBlock('→','Keep Sweeping','Sweep the camera LEFT → RIGHT slowly and steadily.')
+      showToast('warn','→','Keep Moving','Pan left → right to scan the unit.')
     }
     return
   } else {
-    if(stallSince) clearBlock()
-    stallSince = null
+    if(stallSince){ clearBlock(); stallSince = null }
   }
 
-  // ── Valid rightward pan — accumulate zone time ────────────────────────────
+  // ── Fast pan — freeze zone timer only, never stop the recording ───────────
+  // Panning fast doesn't penalise the user — zone timer just doesn't tick.
+  // This forces them to slow down to actually fill the zones.
+  if(pan.tooFast){
+    lastPanTs = null
+    if(!fastSince) fastSince = now
+    if(now - fastSince > 400){
+      showBlock('🐇','Too Fast!','Slow down — sweep smoothly LEFT → RIGHT.')
+      showToast('warn','🐇','Slow Down','Move slower to fill the scan zones.')
+    }
+    return
+  } else {
+    if(fastSince){ clearBlock(); fastSince = null }
+  }
+
+  // ── Valid rightward pan at good speed — accumulate zone time ──────────────
   clearBlock()
 
-  // Wall-clock start of this unit scan
+  // Record when this unit's first valid pan started (wall-clock)
   if(unitStartTs === null) unitStartTs = now
 
   if(pan.panningRight){
-    // Speed gate: >MAX_ZONE_SPEED = timer freezes (can't rush through with fast pan)
     const speedOk = pan.absPan <= MAX_ZONE_SPEED
-
     if(speedOk && lastPanTs !== null){
       const dt = Math.min(now - lastPanTs, 150)
       zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
@@ -870,14 +853,15 @@ function processScan(now){
 
   if(zonesDone < N_ZONES) return
 
-  // ── All zones filled — enforce hard 3-second floor ────────────────────────
+  // ── All zones filled — now check total sweep time ─────────────────────────
+  // Only HERE do we evaluate if the sweep was fast enough.
+  // If under MIN_UNIT_MS → the user rushed → stop and make them redo it.
   const elapsed = now - (unitStartTs || now)
   if(elapsed < MIN_UNIT_MS){
-    // Shouldn't normally reach here (speed gate prevents it), but hard stop if so
     stopAndFail(
-      'Unit ' + currentUnit + ': Captured too quickly (' + (elapsed/1000).toFixed(1) + 's).\n' +
+      'Unit ' + currentUnit + ': Captured in only ' + (elapsed / 1000).toFixed(1) + 's.\n' +
       'Each unit requires at least 3 seconds LEFT → RIGHT.\n' +
-      'Press "Record Again" to restart.'
+      'Slow down your sweep and record again.'
     )
     return
   }
