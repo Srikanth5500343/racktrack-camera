@@ -331,15 +331,19 @@ let rackHoldStart  = null
 const RACK_HOLD_MS = 2500
 
 // Scan phase — TIME-BASED zone system
-// Each of the 3 zones requires ZONE_MS ms of active rightward panning.
-// Zones are sequential: zone 0 must complete before zone 1 starts, etc.
-// Pausing mid-zone is fine — timers freeze, not reset.
-const N_ZONES    = 3
-const ZONE_MS    = 1100   // ms per zone → ~3.3s total for all 3
-let zoneTime     = [0, 0, 0]   // accumulated ms per zone
-let currentZone  = 0           // which zone we're currently filling
-let zonesDone    = 0           // how many zones are fully complete
-let lastPanTs    = null        // timestamp of last frame where pan was valid
+// Each of the 3 zones requires ZONE_MS ms of VALID rightward panning.
+// Zones are sequential: zone 0 must complete before zone 1 starts.
+// Panning too fast = timer FREEZES (speed cannot substitute for time).
+// Hard floor: unit cannot complete in under MIN_UNIT_MS total wall-clock time.
+const N_ZONES        = 3
+const ZONE_MS        = 1100   // ms of valid pan needed per zone → 3.3s minimum
+const MAX_ZONE_SPEED = 55     // deg/s above this, zone timer does NOT tick
+const MIN_UNIT_MS    = 3000   // hard floor: unit can NEVER finish in under 3s
+let zoneTime     = [0, 0, 0]
+let currentZone  = 0
+let zonesDone    = 0
+let lastPanTs    = null
+let unitStartTs  = null       // wall-clock when current unit scan began
 let currentUnit  = 1
 let wrongDirSince  = null
 let wrongDirCount  = 0
@@ -588,6 +592,7 @@ function resetScanState(){
   currentZone = 0
   zonesDone   = 0
   lastPanTs   = null
+  unitStartTs = null
   wrongDirSince = null; wrongDirCount = 0
   fastSince = null; stallSince = null
 }
@@ -802,12 +807,13 @@ function processScan(now){
     wrongDirSince = null
   }
 
-  // ── Too fast ──────────────────────────────────────────────────────────────
+  // ── Too fast (global hard block — way over speed limit) ──────────────────
   if(pan.tooFast){
     if(!fastSince) fastSince = now
-    if(now - fastSince > 500){
-      showBlock('🐇','Too Fast!','Slow down for a clear scan.')
-      showToast('err','🐇','Too Fast','Slow down your pan speed.')
+    lastPanTs = null   // freeze zone timer while too fast
+    if(now - fastSince > 400){
+      showBlock('🐇','Too Fast!','Slow down — sweep takes at least 3 seconds.')
+      showToast('err','🐇','Too Fast','Slow and steady — at least 3 sec per unit.')
     }
     return
   } else {
@@ -815,43 +821,65 @@ function processScan(now){
     fastSince = null
   }
 
-  // ── Not moving / stalled ──────────────────────────────────────────────────
-  // Only show stall warning after 5 seconds (was 4s) — avoid false positives
-  // on brief natural pauses during a sweep
+  // ── Not moving / stalled ─────────────────────────────────────────────────
   if(pan.tooSlow){
     if(!stallSince) stallSince = now
+    lastPanTs = null   // freeze zone timer while stalled
     if(now - stallSince > 5000){
       showBlock('→','Sweep Left to Right','Move the camera slowly from LEFT to RIGHT across the rack.')
       showToast('warn','→','Sweep Left → Right','Pan the camera horizontally LEFT → RIGHT.')
     }
-    // Don't return early — if zones have been earned already, preserve them
     return
   } else {
     if(stallSince){ clearBlock() }
     stallSince = null
   }
 
-  // ── Valid right-pan: accumulate TIME in the current zone ─────────────────
+  // ── Valid rightward pan — accumulate zone time ────────────────────────────
   clearBlock()
 
-  if(pan.panningRight && lastPanTs !== null){
-    const dt = Math.min(now - lastPanTs, 150)   // cap delta to avoid big jumps after stalls
-    zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
+  // Track wall-clock start of this unit's scan (for hard-floor enforcement)
+  if(unitStartTs === null) unitStartTs = now
 
-    // Zone complete?
-    if(zoneTime[currentZone] >= ZONE_MS){
-      zonesDone = currentZone + 1
-      if(currentZone < N_ZONES - 1){
-        currentZone++   // advance to next zone
+  if(pan.panningRight){
+    // Speed gate: only tick the zone timer if moving at a reasonable pace.
+    // Panning too fast (>MAX_ZONE_SPEED) freezes the timer — speed can't shortcut time.
+    const speedOk = pan.absPan <= MAX_ZONE_SPEED
+
+    if(speedOk && lastPanTs !== null){
+      const dt = Math.min(now - lastPanTs, 150)
+      zoneTime[currentZone] = Math.min(ZONE_MS, zoneTime[currentZone] + dt)
+
+      if(zoneTime[currentZone] >= ZONE_MS){
+        zonesDone = currentZone + 1
+        if(currentZone < N_ZONES - 1) currentZone++
       }
     }
+
+    // Show subtle "too fast for zone" hint without full blocker
+    if(!speedOk){
+      lastPanTs = null
+      showToast('warn','🐢','Slow Down','Move slower — timer only fills at a steady pace.')
+    } else {
+      lastPanTs = now
+    }
+
     updateZonePips()
+  } else {
+    lastPanTs = null
   }
-  lastPanTs = pan.panningRight ? now : null
 
   if(zonesDone < N_ZONES) return
 
-  // ── All 3 zones timed out — unit complete ─────────────────────────────────
+  // ── All 3 zones timed — check hard floor before completing ────────────────
+  const elapsed = now - (unitStartTs || now)
+  if(elapsed < MIN_UNIT_MS){
+    // Zones filled too fast (edge case) — freeze until floor is met
+    showToast('warn','⏱','Hold On…', `Keep sweeping — ${((MIN_UNIT_MS - elapsed)/1000).toFixed(1)}s remaining.`)
+    return
+  }
+
+  // ── Unit complete ─────────────────────────────────────────────────────────
   currentUnit++
   unitNum.textContent = currentUnit
   resetScanState()
